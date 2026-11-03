@@ -161,6 +161,17 @@ fn set_internal_error(code: ErrorType, message: &'static str) {
     unsafe { clingo_set_error(code as clingo_error_t, message.as_ptr()) }
 }
 
+/// Create a slice from an array passed by clingo.
+///
+/// clingo may pass a null pointer for empty arrays, which `std::slice::from_raw_parts` does not allow.
+unsafe fn slice_from_raw_parts<'a, T>(data: *const T, len: usize) -> &'a [T] {
+    if len == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(data, len)
+    }
+}
+
 /// Object to add command-line options.
 pub struct Options(clingo_options_t);
 
@@ -867,7 +878,7 @@ unsafe extern "C" fn unsafe_ground_callback<T: FunctionHandler>(
     }
     let location = &*(location as *const ast::Location);
     let name = CStr::from_ptr(name);
-    let arguments = std::slice::from_raw_parts(arguments as *const Symbol, arguments_size);
+    let arguments = slice_from_raw_parts(arguments as *const Symbol, arguments_size);
     let event_handler = &mut *(event_handler as *mut T);
 
     match try_symbol_callback(
@@ -1579,7 +1590,7 @@ unsafe extern "C" fn unsafe_propagate<T: Propagator>(
         return false;
     }
     let control = &mut *(control as *mut PropagateControl);
-    let changes = std::slice::from_raw_parts(changes as *const SolverLiteral, size);
+    let changes = slice_from_raw_parts(changes as *const SolverLiteral, size);
     let propagator = &mut *(propagator as *mut T);
 
     propagator.propagate(control, changes)
@@ -1596,7 +1607,7 @@ unsafe extern "C" fn unsafe_undo<T: Propagator>(
         return;
     }
     let control = &mut *(control as *mut PropagateControl);
-    let changes = std::slice::from_raw_parts(changes as *const SolverLiteral, size);
+    let changes = slice_from_raw_parts(changes as *const SolverLiteral, size);
     let propagator = &mut *(propagator as *mut T);
 
     propagator.undo(control, changes)
@@ -3685,7 +3696,7 @@ impl TheoryAtoms {
                 "Call to clingo_theory_atoms_term_arguments() failed",
             ));
         }
-        let arguments_ref = unsafe { std::slice::from_raw_parts(c_ptr as *const Id, size) };
+        let arguments_ref = unsafe { slice_from_raw_parts(c_ptr as *const Id, size) };
         Ok(arguments_ref)
     }
 
@@ -3736,7 +3747,7 @@ impl TheoryAtoms {
                 "Call to clingo_theory_atoms_element_tuple() failed",
             ));
         }
-        let tuple_ref = unsafe { std::slice::from_raw_parts(tuple_ptr as *const Id, size) };
+        let tuple_ref = unsafe { slice_from_raw_parts(tuple_ptr as *const Id, size) };
         Ok(tuple_ref)
     }
 
@@ -3756,7 +3767,7 @@ impl TheoryAtoms {
             ));
         }
         let condition_ref =
-            unsafe { std::slice::from_raw_parts(condition_ptr as *const SolverLiteral, size) };
+            unsafe { slice_from_raw_parts(condition_ptr as *const SolverLiteral, size) };
         Ok(condition_ref)
     }
 
@@ -3847,7 +3858,7 @@ impl TheoryAtoms {
                 "Call to clingo_theory_atoms_atom_elements() failed",
             ));
         }
-        let elements = unsafe { std::slice::from_raw_parts(elements_ptr as *const Id, size) };
+        let elements = unsafe { slice_from_raw_parts(elements_ptr as *const Id, size) };
         Ok(elements)
     }
 
@@ -5814,8 +5825,8 @@ unsafe extern "C" fn unsafe_rule<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_rule() got a null pointer.");
         return false;
     }
-    let head = std::slice::from_raw_parts(head as *const Atom, head_size);
-    let body = std::slice::from_raw_parts(body as *const SolverLiteral, body_size);
+    let head = slice_from_raw_parts(head as *const Atom, head_size);
+    let body = slice_from_raw_parts(body as *const SolverLiteral, body_size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.rule(choice, head, body)
@@ -5831,7 +5842,7 @@ unsafe extern "C" fn unsafe_minimize<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_minimize() got a null pointer.");
         return false;
     }
-    let literals = std::slice::from_raw_parts(literals as *const WeightedLiteral, size);
+    let literals = slice_from_raw_parts(literals as *const WeightedLiteral, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.minimize(priority, literals)
@@ -5846,7 +5857,7 @@ unsafe extern "C" fn unsafe_project<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_project() got a null pointer.");
         return false;
     }
-    let atoms = std::slice::from_raw_parts(atoms as *const Atom, size);
+    let atoms = slice_from_raw_parts(atoms as *const Atom, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.project(atoms)
@@ -5868,8 +5879,8 @@ unsafe extern "C" fn unsafe_weight_rule<T: GroundProgramObserver>(
         );
         return false;
     }
-    let head = std::slice::from_raw_parts(head as *const Atom, head_size);
-    let body = std::slice::from_raw_parts(body as *const WeightedLiteral, body_size);
+    let head = slice_from_raw_parts(head as *const Atom, head_size);
+    let body = slice_from_raw_parts(body as *const WeightedLiteral, body_size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.weight_rule(choice, head, lower_bound, body)
@@ -5903,7 +5914,7 @@ unsafe extern "C" fn unsafe_output_term<T: GroundProgramObserver>(
         );
         return false;
     }
-    let condition = std::slice::from_raw_parts(condition as *const SolverLiteral, size);
+    let condition = slice_from_raw_parts(condition as *const SolverLiteral, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.output_term(Symbol(symbol), condition)
@@ -5939,7 +5950,7 @@ unsafe extern "C" fn unsafe_assume<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_assume() got a null pointer.");
         return false;
     }
-    let literals = std::slice::from_raw_parts(literals as *const SolverLiteral, size);
+    let literals = slice_from_raw_parts(literals as *const SolverLiteral, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.assume(literals)
@@ -5958,7 +5969,7 @@ unsafe extern "C" fn unsafe_heuristic<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_heuristic() got a null pointer.");
         return false;
     }
-    let condition = std::slice::from_raw_parts(condition as *const SolverLiteral, size);
+    let condition = slice_from_raw_parts(condition as *const SolverLiteral, size);
     let gpo = &mut *(gpo as *mut T);
 
     match HeuristicType::try_from(htype as u32) {
@@ -5982,7 +5993,7 @@ unsafe extern "C" fn unsafe_acyc_edge<T: GroundProgramObserver>(
         set_internal_error(ErrorType::Runtime, "unsafe_heuristic() got a null pointer.");
         return false;
     }
-    let condition = std::slice::from_raw_parts(condition as *const SolverLiteral, size);
+    let condition = slice_from_raw_parts(condition as *const SolverLiteral, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.acyc_edge(node_u, node_v, condition)
@@ -6045,7 +6056,7 @@ unsafe extern "C" fn unsafe_theory_term_compound<T: GroundProgramObserver>(
         );
         return false;
     }
-    let arguments = std::slice::from_raw_parts(arguments as *const Id, size);
+    let arguments = slice_from_raw_parts(arguments as *const Id, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.theory_term_compound(Id(term_id), name_id_or_type, arguments)
@@ -6069,8 +6080,8 @@ unsafe extern "C" fn unsafe_theory_element<T: GroundProgramObserver>(
         );
         return false;
     }
-    let terms = std::slice::from_raw_parts(terms as *const Id, terms_size);
-    let condition = std::slice::from_raw_parts(condition as *const SolverLiteral, condition_size);
+    let terms = slice_from_raw_parts(terms as *const Id, terms_size);
+    let condition = slice_from_raw_parts(condition as *const SolverLiteral, condition_size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.theory_element(Id(element_id), terms, condition)
@@ -6090,7 +6101,7 @@ unsafe extern "C" fn unsafe_theory_atom<T: GroundProgramObserver>(
         );
         return false;
     }
-    let elements = std::slice::from_raw_parts(elements as *const Id, size);
+    let elements = slice_from_raw_parts(elements as *const Id, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.theory_atom(Id(atom_id_or_zero), Id(term_id), elements)
@@ -6112,7 +6123,7 @@ unsafe extern "C" fn unsafe_theory_atom_with_guard<T: GroundProgramObserver>(
         );
         return false;
     }
-    let elements = std::slice::from_raw_parts(elements as *const Id, size);
+    let elements = slice_from_raw_parts(elements as *const Id, size);
     let gpo = &mut *(gpo as *mut T);
 
     gpo.theory_atom_with_guard(
