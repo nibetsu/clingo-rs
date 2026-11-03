@@ -652,6 +652,22 @@ fn ast_program() {
     let stm = prg.into();
     test_statement(&stm, "#program base.");
 }
+#[test]
+fn ast_comment() {
+    let loc = Location::default();
+    let line = comment(&loc, "% line comment", CommentType::Line).unwrap();
+    assert_eq!(line.value().unwrap(), "% line comment");
+    assert_eq!(line.comment_type().unwrap(), CommentType::Line);
+    let stm = line.into();
+    test_statement(&stm, "% line comment");
+
+    let block = comment(&loc, "%* block comment *%", CommentType::Block).unwrap();
+    assert_eq!(block.comment_type().unwrap(), CommentType::Block);
+    match Statement::from(block).is_a().unwrap() {
+        StatementIsA::Comment(c) => assert_eq!(c.value().unwrap(), "%* block comment *%"),
+        x => panic!("unexpected statement: {:?}", x),
+    }
+}
 // #[test]
 // fn ui() {
 //     let t = trybuild::TestCases::new();

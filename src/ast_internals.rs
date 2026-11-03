@@ -118,6 +118,7 @@ pub(crate) enum ASTType {
     ProjectSignature = clingo_ast_type_e_clingo_ast_type_project_signature as isize,
     Defined = clingo_ast_type_e_clingo_ast_type_defined as isize,
     TheoryDefinition = clingo_ast_type_e_clingo_ast_type_theory_definition as isize,
+    Comment = clingo_ast_type_e_clingo_ast_type_comment as isize,
 }
 impl ASTType {
     fn try_from(code: u32) -> Result<ASTType, ClingoError> {
@@ -185,6 +186,7 @@ impl ASTType {
             clingo_ast_type_e_clingo_ast_type_project_signature => Ok(ASTType::ProjectSignature),
             clingo_ast_type_e_clingo_ast_type_defined => Ok(ASTType::Defined),
             clingo_ast_type_e_clingo_ast_type_theory_definition => Ok(ASTType::TheoryDefinition),
+            clingo_ast_type_e_clingo_ast_type_comment => Ok(ASTType::Comment),
             x => {
                 eprintln!(
                     "FFIError in {} {}, {} : Failed to match clingo_ast_type {}",
@@ -312,6 +314,7 @@ enum ASTAttribute {
     Value = clingo_ast_attribute_e_clingo_ast_attribute_value as isize,
     Variable = clingo_ast_attribute_e_clingo_ast_attribute_variable as isize,
     Weight = clingo_ast_attribute_e_clingo_ast_attribute_weight as isize,
+    CommentType = clingo_ast_attribute_e_clingo_ast_attribute_comment_type as isize,
 }
 
 /// This struct provides a view to nodes in the AST.
@@ -575,6 +578,46 @@ impl<'a> AST<'a> {
     //         value: ::std::os::raw::c_int,
     //     ) -> bool;
     // }
+
+    /// Get the value of an attribute of type ASTAttributeType::Number
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    fn get_attribute_number(&self, attribute: ASTAttribute) -> Result<i32, ClingoError> {
+        let mut value = 0;
+        if !unsafe {
+            clingo_ast_attribute_get_number(self.ptr.as_ptr(), attribute as i32, &mut value)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_get_number() failed.",
+            ));
+        }
+        Ok(value)
+    }
+
+    /// Get the value of an attribute of type ASTAttributeType::String
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    fn get_attribute_string(&self, attribute: ASTAttribute) -> Result<&'static str, ClingoError> {
+        let mut value = std::ptr::null();
+        if !unsafe {
+            clingo_ast_attribute_get_string(self.ptr.as_ptr(), attribute as i32, &mut value)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_get_string() failed.",
+            ));
+        }
+        // strings in the AST are internalized and valid for the duration of the process
+        Ok(unsafe { CStr::from_ptr(value) }.to_str()?)
+    }
+
+    pub(crate) fn value(&self) -> Result<&'static str, ClingoError> {
+        self.get_attribute_string(ASTAttribute::Value)
+    }
+    pub(crate) fn comment_type(&self) -> Result<i32, ClingoError> {
+        self.get_attribute_number(ASTAttribute::CommentType)
+    }
 
     /// Get the value of an attribute of type ASTAttributeType::Symbol
     ///

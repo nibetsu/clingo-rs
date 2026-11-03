@@ -388,6 +388,35 @@ pub enum TheoryAtomType {
             as isize,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+/// Enumeration of comment types.
+pub enum CommentType {
+    /// For line comments `% ...`.
+    Line = clingo_comment_type_e_clingo_comment_type_line as isize,
+    /// For block comments `%* ... *%`.
+    Block = clingo_comment_type_e_clingo_comment_type_block as isize,
+}
+impl CommentType {
+    fn try_from(code: u32) -> Result<CommentType, ClingoError> {
+        match code {
+            clingo_comment_type_e_clingo_comment_type_line => Ok(CommentType::Line),
+            clingo_comment_type_e_clingo_comment_type_block => Ok(CommentType::Block),
+            x => {
+                eprintln!(
+                    "FFIError in {} {}, {} : Failed to match clingo_comment_type {}",
+                    file!(),
+                    line!(),
+                    column!(),
+                    x
+                );
+                Err(ClingoError::FFIError {
+                    msg: "Failed to match clingo_comment_type.",
+                })
+            }
+        }
+    }
+}
+
 // Here start the ASTTypes
 
 #[derive(Debug, Clone)]
@@ -738,6 +767,7 @@ impl<'a> Statement<'a> {
             ASTType::ProjectSignature => Ok(StatementIsA::ProjectSignature(ProjectSignature {
                 ast: self.ast,
             })),
+            ASTType::Comment => Ok(StatementIsA::Comment(Comment { ast: self.ast })),
             x => panic!("unexpected ASTType: {:?}", x),
         }
     }
@@ -761,6 +791,7 @@ pub enum StatementIsA<'a> {
     ProjectAtom(ProjectAtom<'a>),
     ProjectSignature(ProjectSignature<'a>),
     TheoryDefinition(TheoryDefinition<'a>),
+    Comment(Comment<'a>),
 }
 impl<'a> From<Rule<'a>> for Statement<'a> {
     fn from(x: Rule<'a>) -> Self {
@@ -829,6 +860,11 @@ impl<'a> From<ProjectSignature<'a>> for Statement<'a> {
 }
 impl<'a> From<TheoryDefinition<'a>> for Statement<'a> {
     fn from(x: TheoryDefinition<'a>) -> Self {
+        Statement { ast: x.ast }
+    }
+}
+impl<'a> From<Comment<'a>> for Statement<'a> {
+    fn from(x: Comment<'a>) -> Self {
         Statement { ast: x.ast }
     }
 }
@@ -1124,6 +1160,22 @@ pub struct Defined<'a> {
 #[derive(Debug, Clone)]
 pub struct TheoryDefinition<'a> {
     ast: AST<'a>,
+}
+#[derive(Debug, Clone)]
+pub struct Comment<'a> {
+    ast: AST<'a>,
+}
+impl<'a> Comment<'a> {
+    pub fn location(&self) -> Location {
+        self.ast.location().unwrap()
+    }
+    /// The text of the comment including the comment markers.
+    pub fn value(&self) -> Result<&'static str, ClingoError> {
+        self.ast.value()
+    }
+    pub fn comment_type(&self) -> Result<CommentType, ClingoError> {
+        CommentType::try_from(self.ast.comment_type()? as u32)
+    }
 }
 
 // extern "C" {
@@ -2920,6 +2972,43 @@ pub fn theory_definition<'a>(
     }
     match NonNull::new(ast) {
         Some(ast) => Ok(TheoryDefinition {
+            ast: AST {
+                ptr: ast,
+                _lifetime: PhantomData,
+            },
+        }),
+        None => Err(ClingoError::FFIError {
+            msg: "Tried creating NonNull from a null pointer.",
+        })?,
+    }
+}
+
+/// Construct an AST node of type `ASTType.Comment`.
+///
+/// The `value` is the text of the comment including the comment markers, e.g. `% comment`.
+pub fn comment<'a>(
+    location: &Location,
+    value: &str,
+    comment_type: CommentType,
+) -> Result<Comment<'a>, ClingoError> {
+    let mut ast = std::ptr::null_mut();
+    let value = internalize_string(value)?;
+
+    if !unsafe {
+        clingo_ast_build(
+            clingo_ast_type_e_clingo_ast_type_comment as i32,
+            &mut ast,
+            location,
+            value,
+            comment_type as i32,
+        )
+    } {
+        return Err(ClingoError::new_internal(
+            "Call to clingo_ast_build() failed.",
+        ));
+    }
+    match NonNull::new(ast) {
+        Some(ast) => Ok(Comment {
             ast: AST {
                 ptr: ast,
                 _lifetime: PhantomData,
