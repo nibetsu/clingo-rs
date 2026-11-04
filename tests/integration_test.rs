@@ -668,6 +668,58 @@ fn ast_comment() {
         x => panic!("unexpected statement: {:?}", x),
     }
 }
+
+#[derive(Default)]
+struct StatementCollector {
+    statements: Vec<String>,
+}
+impl StatementHandler for StatementCollector {
+    fn on_statement(&mut self, stm: &Statement) -> bool {
+        self.statements.push(stm.to_string().unwrap());
+        true
+    }
+}
+#[test]
+fn ast_parse_comments() {
+    let mut collector = StatementCollector::default();
+    parse_string_with_statement_handler(
+        "% line comment\na :- b. %* block comment *%\n",
+        &mut collector,
+    )
+    .unwrap();
+    assert_eq!(
+        collector.statements,
+        [
+            "#program base.",
+            "% line comment",
+            "a :- b.",
+            "%* block comment *%"
+        ]
+    );
+}
+#[test]
+fn ast_parse_theory_definition() {
+    let mut collector = StatementCollector::default();
+    parse_string_with_statement_handler(
+        "#theory t { term { }; &a/0: term, head }.",
+        &mut collector,
+    )
+    .unwrap();
+    assert_eq!(collector.statements.len(), 2);
+    assert!(collector.statements[1].starts_with("#theory t {"));
+
+    struct TheoryDefinitionCheck;
+    impl StatementHandler for TheoryDefinitionCheck {
+        fn on_statement(&mut self, stm: &Statement) -> bool {
+            !matches!(stm.clone().is_a(), Err(_))
+        }
+    }
+    parse_string_with_statement_handler(
+        "#theory t { term { }; &a/0: term, head }.",
+        &mut TheoryDefinitionCheck,
+    )
+    .unwrap();
+}
 // #[test]
 // fn ui() {
 //     let t = trybuild::TestCases::new();

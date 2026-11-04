@@ -274,7 +274,16 @@ unsafe extern "C" fn unsafe_ast_callback<T: StatementHandler>(
         Ok(ASTType::Heuristic) => Statement { ast },
         Ok(ASTType::ProjectAtom) => Statement { ast },
         Ok(ASTType::ProjectSignature) => Statement { ast },
-        x => panic!("unexpected ASTType: {:?}", x),
+        Ok(ASTType::TheoryDefinition) => Statement { ast },
+        Ok(ASTType::Comment) => Statement { ast },
+        _ => {
+            // panicking here would abort the process, so report the error to clingo instead
+            set_internal_error(
+                ErrorType::Runtime,
+                "unsafe_ast_callback() got an unexpected ASTType.",
+            );
+            return false;
+        }
     };
     event_handler.on_statement(&stm)
 }
@@ -765,6 +774,9 @@ impl<'a> Statement<'a> {
             ASTType::Heuristic => Ok(StatementIsA::Heuristic(Heuristic { ast: self.ast })),
             ASTType::ProjectAtom => Ok(StatementIsA::ProjectAtom(ProjectAtom { ast: self.ast })),
             ASTType::ProjectSignature => Ok(StatementIsA::ProjectSignature(ProjectSignature {
+                ast: self.ast,
+            })),
+            ASTType::TheoryDefinition => Ok(StatementIsA::TheoryDefinition(TheoryDefinition {
                 ast: self.ast,
             })),
             ASTType::Comment => Ok(StatementIsA::Comment(Comment { ast: self.ast })),
