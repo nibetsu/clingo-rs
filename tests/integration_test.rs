@@ -669,6 +669,96 @@ fn ast_comment() {
     }
 }
 
+fn ground_base(arguments: Vec<String>, program: &str) -> Control {
+    let mut ctl = control(arguments).unwrap();
+    ctl.add("base", &[], program)
+        .expect("Failed to add a logic program.");
+    let part = Part::new("base", vec![]).unwrap();
+    ctl.ground(&[part])
+        .expect("Failed to ground a logic program.");
+    ctl
+}
+fn atom_literal(ctl: &Control, name: &str) -> SolverLiteral {
+    ctl.symbolic_atoms()
+        .unwrap()
+        .iter()
+        .unwrap()
+        .find(|atom| atom.symbol().unwrap().to_string() == name)
+        .unwrap()
+        .literal()
+        .unwrap()
+}
+#[test]
+fn model_is_consequence() {
+    // during normal enumeration consequences correspond to the truth values in the model
+    let ctl = ground_base(vec!["0".into()], "a. {b}.");
+    let a = atom_literal(&ctl, "a");
+    let b = atom_literal(&ctl, "b");
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    let mut models = 0;
+    loop {
+        handle.resume().unwrap();
+        match handle.model().unwrap() {
+            Some(model) => {
+                models += 1;
+                assert_eq!(model.is_consequence(a).unwrap(), Consequence::True);
+                let expected = if model.is_true(b).unwrap() {
+                    Consequence::True
+                } else {
+                    Consequence::False
+                };
+                assert_eq!(model.is_consequence(b).unwrap(), expected);
+            }
+            None => break,
+        }
+    }
+    assert_eq!(models, 2);
+    handle.close().unwrap();
+
+    // the last model of the cautious consequences only contains a
+    let ctl = ground_base(vec!["--enum-mode=cautious".into(), "0".into()], "a. {b}.");
+    let a = atom_literal(&ctl, "a");
+    let b = atom_literal(&ctl, "b");
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    let mut last = None;
+    loop {
+        handle.resume().unwrap();
+        match handle.model().unwrap() {
+            Some(model) => {
+                last = Some((
+                    model.is_consequence(a).unwrap(),
+                    model.is_consequence(b).unwrap(),
+                ))
+            }
+            None => break,
+        }
+    }
+    assert_eq!(last, Some((Consequence::True, Consequence::False)));
+    handle.close().unwrap();
+}
+#[test]
+fn model_priority() {
+    let ctl = ground_base(
+        vec!["0".into()],
+        "{a; b}. :- not a, not b. #minimize { 1@2: a }. #minimize { 1@1: b }.",
+    );
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    let mut models = 0;
+    loop {
+        handle.resume().unwrap();
+        match handle.model().unwrap() {
+            Some(model) => {
+                models += 1;
+                assert_eq!(model.priority().unwrap(), [2, 1]);
+                assert_eq!(model.cost().unwrap().len(), 2);
+            }
+            None => break,
+        }
+    }
+    assert!(models > 0);
+    handle.close().unwrap();
+}
+
 #[derive(Default)]
 struct StatementCollector {
     statements: Vec<String>,

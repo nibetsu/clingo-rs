@@ -207,6 +207,40 @@ impl TruthValue {
     }
 }
 
+/// Represents whether a literal is a consequence.
+///
+/// **See:** [`Model::is_consequence()`]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Consequence {
+    /// The literal is not a consequence
+    False = clingo_consequence_e_clingo_consequence_false as isize,
+    /// The literal is a consequence
+    True = clingo_consequence_e_clingo_consequence_true as isize,
+    /// It is not yet known whether the literal is a consequence
+    Unknown = clingo_consequence_e_clingo_consequence_unknown as isize,
+}
+impl Consequence {
+    fn try_from(code: u32) -> Result<Consequence, ClingoError> {
+        match code {
+            clingo_consequence_e_clingo_consequence_false => Ok(Consequence::False),
+            clingo_consequence_e_clingo_consequence_true => Ok(Consequence::True),
+            clingo_consequence_e_clingo_consequence_unknown => Ok(Consequence::Unknown),
+            x => {
+                eprintln!(
+                    "FFIError in {} {}, {} : Failed to match clingo_consequence {}",
+                    file!(),
+                    line!(),
+                    column!(),
+                    x
+                );
+                Err(ClingoError::FFIError {
+                    msg: "Failed to match clingo_consequence.",
+                })
+            }
+        }
+    }
+}
+
 /// Enumeration of clause types determining the lifetime of a clause.
 ///
 /// Clauses in the solver are either cleaned up based on a configurable deletion policy or at the end of a solving step.
@@ -4074,6 +4108,25 @@ impl Model {
         Ok(is_true)
     }
 
+    /// Check whether a program literal is a consequence.
+    ///
+    /// While enumerating cautious or brave consequences, there is partial information about which
+    /// literals are consequences. During normal model enumeration, this function just returns
+    /// whether the literal is true or false in the current model.
+    ///
+    /// # Arguments
+    ///
+    /// * `literal` - the literal to lookup
+    pub fn is_consequence(&self, literal: SolverLiteral) -> Result<Consequence, ClingoError> {
+        let mut result = 0;
+        if !unsafe { clingo_model_is_consequence(&self.0, literal.0, &mut result) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_model_is_consequence() failed",
+            ));
+        }
+        Consequence::try_from(result as u32)
+    }
+
     // NODO: fn clingo_model_cost_size(model: *mut Model, size: *mut size_t) -> u8;
 
     /// Get the cost vector of a model.
@@ -4098,6 +4151,29 @@ impl Model {
             ));
         }
         Ok(cost)
+    }
+
+    /// Get the priorities of the costs, the i-th priority belongs to the i-th entry of
+    /// [`Model::cost()`].
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    /// or [`ErrorCode::Runtime`] if the size is too small
+    pub fn priority(&self) -> Result<Vec<i32>, ClingoError> {
+        let mut size: usize = 0;
+        if !unsafe { clingo_model_cost_size(&self.0, &mut size) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_model_cost_size() failed",
+            ));
+        }
+        let mut priorities = vec![0; size];
+        if !unsafe { clingo_model_priority(&self.0, priorities.as_mut_ptr(), size) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_model_priority() failed",
+            ));
+        }
+        Ok(priorities)
     }
 
     /// Whether the optimality of a model has been proven.
