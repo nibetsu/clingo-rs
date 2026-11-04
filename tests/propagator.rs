@@ -436,6 +436,44 @@ fn mode_propagator() {
     );
 }
 
+struct TestCheckMode {
+    mode: PropagatorCheckMode,
+    result: Rc<RefCell<Option<PropagatorCheckMode>>>,
+}
+impl Propagator for TestCheckMode {
+    fn init(&mut self, init: &mut PropagateInit) -> bool {
+        init.set_check_mode(self.mode);
+        *self.result.borrow_mut() = init.get_check_mode().ok();
+        true
+    }
+}
+
+#[test_case(PropagatorCheckMode::None; "none")]
+#[test_case(PropagatorCheckMode::Total; "total")]
+#[test_case(PropagatorCheckMode::Fixpoint; "fixpoint")]
+#[test_case(PropagatorCheckMode::Both; "both")]
+fn check_mode(mode: PropagatorCheckMode) {
+    let result = Rc::new(RefCell::new(None));
+    let ctrl_ctx = CtrlCtx {
+        non: defaults::Non,
+        propagator: TestCheckMode {
+            mode,
+            result: result.clone(),
+        },
+    };
+    let mut ctl = control_with_context(vec![], ctrl_ctx).unwrap();
+    ctl.add("base", &[], "{a}.")
+        .expect("Failed to add a logic program.");
+    let parts = vec![Part::new("base", vec![]).unwrap()];
+    ctl.ground(&parts)
+        .expect("Failed to ground a logic program.");
+    solve(ctl).unwrap();
+    assert_eq!(
+        result.borrow().map(|mode| mode as isize),
+        Some(mode as isize)
+    );
+}
+
 use std::collections::HashSet;
 use std::sync::{Condvar, Mutex};
 struct TestAddWatch {

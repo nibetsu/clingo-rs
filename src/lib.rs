@@ -571,6 +571,9 @@ impl PropagatorCheckMode {
             clingo_propagator_check_mode_e_clingo_propagator_check_mode_none => {
                 Ok(PropagatorCheckMode::None)
             }
+            clingo_propagator_check_mode_e_clingo_propagator_check_mode_both => {
+                Ok(PropagatorCheckMode::Both)
+            }
             x => {
                 eprintln!(
                     "FFIError in {} {}, {} : Failed to match clingo_propagator_check_mode {}",
