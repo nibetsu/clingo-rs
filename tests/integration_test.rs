@@ -758,6 +758,28 @@ fn model_priority() {
     assert!(models > 0);
     handle.close().unwrap();
 }
+#[test]
+fn solve_handle_last() {
+    let ctl = ground_base(
+        vec![],
+        "1 {a; b; c}. #minimize { 1,a: a; 2,b: b; 3,c: c }.",
+    );
+    let mut handle = ctl.solve(SolveMode::empty(), &[]).unwrap();
+    assert!(handle.get().unwrap().contains(SolveResult::SATISFIABLE));
+    let model = handle.last().unwrap().expect("Expected a last model.");
+    assert_eq!(model.cost().unwrap(), [1]);
+    assert!(model.optimality_proven().unwrap());
+    assert!(model
+        .contains(Symbol::create_id("a", true).unwrap())
+        .unwrap());
+    handle.close().unwrap();
+
+    let ctl = ground_base(vec![], "a. :- a.");
+    let mut handle = ctl.solve(SolveMode::empty(), &[]).unwrap();
+    assert!(handle.get().unwrap().contains(SolveResult::UNSATISFIABLE));
+    assert!(handle.last().unwrap().is_none());
+    handle.close().unwrap();
+}
 
 #[derive(Default)]
 struct StatementCollector {

@@ -5120,6 +5120,23 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
         }
         Ok(unsafe { (model as *mut Model).as_mut() })
     }
+    /// When a problem is satisfiable and the search is finished, get the last computed model.
+    ///
+    /// Returns None if the program is unsatisfiable or the search is still ongoing.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    /// or [`ErrorCode::Runtime`] if solving fails
+    pub fn last(&mut self) -> Result<Option<&Model>, ClingoError> {
+        let mut model = std::ptr::null_mut() as *const clingo_model_t;
+        if !unsafe { clingo_solve_handle_last(self.handle.as_ptr(), &mut model) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_solve_handle_last() failed",
+            ));
+        }
+        Ok(unsafe { (model as *const Model).as_ref() })
+    }
     /// When a problem is unsatisfiable, get a subset of the assumptions that made the problem unsatisfiable.
     ///
     /// If the program is not unsatisfiable, an empty vector is returned.
