@@ -623,6 +623,38 @@ impl PropagatorCheckMode {
         }
     }
 }
+/// Undo modes for propagators.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum PropagatorUndoMode {
+    /// Call [`Propagator::undo()`] for non-empty change lists
+    Default = clingo_propagator_undo_mode_e_clingo_propagator_undo_mode_default as isize,
+    /// Also call [`Propagator::undo()`] when [`Propagator::check()`] has been called
+    Always = clingo_propagator_undo_mode_e_clingo_propagator_undo_mode_always as isize,
+}
+impl PropagatorUndoMode {
+    fn try_from(code: u32) -> Result<PropagatorUndoMode, ClingoError> {
+        match code {
+            clingo_propagator_undo_mode_e_clingo_propagator_undo_mode_default => {
+                Ok(PropagatorUndoMode::Default)
+            }
+            clingo_propagator_undo_mode_e_clingo_propagator_undo_mode_always => {
+                Ok(PropagatorUndoMode::Always)
+            }
+            x => {
+                eprintln!(
+                    "FFIError in {} {}, {} : Failed to match clingo_propagator_undo_mode {}",
+                    file!(),
+                    line!(),
+                    column!(),
+                    x
+                );
+                Err(ClingoError::FFIError {
+                    msg: "Failed to match clingo_propagator_undo_mode.",
+                })
+            }
+        }
+    }
+}
 /// Enumeration of weight_constraint_types.
 #[derive(Debug, Copy, Clone)]
 pub enum WeigthConstraintType {
@@ -4823,6 +4855,26 @@ impl PropagateInit {
         PropagatorCheckMode::try_from(
             unsafe { clingo_propagate_init_get_check_mode(&self.0) } as u32
         )
+    }
+
+    /// Configure when to call the undo method of the propagator.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - the undo mode
+    ///
+    /// **See:** [`Propagator::undo()`]
+    pub fn set_undo_mode(&mut self, mode: PropagatorUndoMode) {
+        unsafe {
+            clingo_propagate_init_set_undo_mode(&mut self.0, mode as clingo_propagator_undo_mode_t)
+        }
+    }
+
+    /// Get the current undo mode of the propagator.
+    ///
+    /// **See:** [`PropagateInit::set_undo_mode()`]
+    pub fn get_undo_mode(&self) -> Result<PropagatorUndoMode, ClingoError> {
+        PropagatorUndoMode::try_from(unsafe { clingo_propagate_init_get_undo_mode(&self.0) } as u32)
     }
 
     /// Get the top level assignment solver.

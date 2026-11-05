@@ -474,6 +474,39 @@ fn check_mode(mode: PropagatorCheckMode) {
     );
 }
 
+struct TestUndoMode {
+    mode: PropagatorUndoMode,
+    result: Rc<RefCell<Option<PropagatorUndoMode>>>,
+}
+impl Propagator for TestUndoMode {
+    fn init(&mut self, init: &mut PropagateInit) -> bool {
+        init.set_undo_mode(self.mode);
+        *self.result.borrow_mut() = init.get_undo_mode().ok();
+        true
+    }
+}
+
+#[test_case(PropagatorUndoMode::Default; "default")]
+#[test_case(PropagatorUndoMode::Always; "always")]
+fn undo_mode(mode: PropagatorUndoMode) {
+    let result = Rc::new(RefCell::new(None));
+    let ctrl_ctx = CtrlCtx {
+        non: defaults::Non,
+        propagator: TestUndoMode {
+            mode,
+            result: result.clone(),
+        },
+    };
+    let mut ctl = control_with_context(vec![], ctrl_ctx).unwrap();
+    ctl.add("base", &[], "{a}.")
+        .expect("Failed to add a logic program.");
+    let parts = vec![Part::new("base", vec![]).unwrap()];
+    ctl.ground(&parts)
+        .expect("Failed to ground a logic program.");
+    solve(ctl).unwrap();
+    assert_eq!(*result.borrow(), Some(mode));
+}
+
 use std::collections::HashSet;
 use std::sync::{Condvar, Mutex};
 struct TestAddWatch {
