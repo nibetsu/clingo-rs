@@ -781,6 +781,112 @@ fn solve_handle_last() {
     handle.close().unwrap();
 }
 
+fn models(ctl: Control) -> Vec<Vec<String>> {
+    let mut models = vec![];
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    loop {
+        handle.resume().unwrap();
+        match handle.model().unwrap() {
+            Some(model) => {
+                let mut symbols: Vec<String> = model
+                    .symbols(ShowType::SHOWN)
+                    .unwrap()
+                    .iter()
+                    .map(|symbol| symbol.to_string())
+                    .collect();
+                symbols.sort();
+                models.push(symbols)
+            }
+            None => break,
+        }
+    }
+    handle.close().unwrap();
+    models.sort();
+    models
+}
+fn temp_file(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("clingo-rs-{}-{}", std::process::id(), name))
+}
+#[test]
+fn control_aspif_backend() {
+    let path = temp_file("program.aspif");
+    let file = path.to_str().unwrap();
+
+    let mut ctl = control(vec![]).unwrap();
+    ctl.register_backend(BackendType::Aspif, file, true)
+        .unwrap();
+    ctl.add("base", &[], "a. {b}.").unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    // the step is only completed when solving
+    let mut handle = ctl.solve(SolveMode::empty(), &[]).unwrap();
+    handle.get().unwrap();
+    drop(handle.close().unwrap());
+    let aspif = std::fs::read_to_string(&path).unwrap();
+    assert!(aspif.starts_with("asp "));
+    assert!(aspif.ends_with("\n0\n"));
+
+    let mut ctl = control(vec!["0".into()]).unwrap();
+    ctl.load_aspif(&[file]).unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    assert_eq!(models(ctl), [vec!["a"], vec!["a", "b"]]);
+    std::fs::remove_file(&path).unwrap();
+}
+#[test]
+fn control_reify_backend() {
+    let path = temp_file("program.reify");
+    let file = path.to_str().unwrap();
+
+    let mut ctl = control(vec![]).unwrap();
+    let reify = BackendType::Reify {
+        sccs: false,
+        steps: false,
+    };
+    ctl.register_backend(reify, file, true).unwrap();
+    ctl.add("base", &[], "{a}.").unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    drop(ctl);
+    let reified = std::fs::read_to_string(&path).unwrap();
+    assert!(reified.contains("rule(choice("));
+    std::fs::remove_file(&path).unwrap();
+}
+#[test]
+fn control_remove_minimize() {
+    let mut ctl = ground_base(vec!["0".into()], "{a}. #minimize { 1: a }.");
+    ctl.remove_minimize().unwrap();
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    let mut count = 0;
+    loop {
+        handle.resume().unwrap();
+        match handle.model().unwrap() {
+            Some(model) => {
+                count += 1;
+                assert!(model.cost().unwrap().is_empty());
+            }
+            None => break,
+        }
+    }
+    handle.close().unwrap();
+    assert_eq!(count, 2);
+}
+#[test]
+fn control_update_project() {
+    // projective enumeration has to be enabled explicitly
+    let args = || vec!["--project".into(), "0".into()];
+    let mut ctl = ground_base(args(), "{a; b}.");
+    let a = Atom::from(atom_literal(&ctl, "a"));
+    let b = Atom::from(atom_literal(&ctl, "b"));
+    ctl.update_project(&[b], false).unwrap();
+    ctl.update_project(&[a], false).unwrap();
+    assert_eq!(models(ctl).len(), 2);
+
+    let mut ctl = ground_base(args(), "{a; b; c}.");
+    let a = Atom::from(atom_literal(&ctl, "a"));
+    let b = Atom::from(atom_literal(&ctl, "b"));
+    ctl.update_project(&[a], false).unwrap();
+    ctl.update_project(&[b], true).unwrap();
+    assert_eq!(models(ctl).len(), 4);
+}
+
 #[derive(Default)]
 struct StatementCollector {
     statements: Vec<String>,

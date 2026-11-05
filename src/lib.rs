@@ -655,6 +655,41 @@ impl PropagatorUndoMode {
         }
     }
 }
+/// Enumeration of clingo's internal backends.
+///
+/// **See:** [`GenericControl::register_backend()`]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum BackendType {
+    /// The reify backend
+    Reify {
+        /// Whether to reify sccs
+        sccs: bool,
+        /// Whether to reify steps individually
+        steps: bool,
+    },
+    /// The aspif backend
+    Aspif,
+    /// The smodels backend
+    Smodels,
+}
+impl BackendType {
+    fn to_raw(self) -> clingo_backend_type_t {
+        match self {
+            BackendType::Reify { sccs, steps } => {
+                let mut type_ = clingo_backend_type_e_clingo_backend_type_reify;
+                if sccs {
+                    type_ |= clingo_backend_type_e_clingo_backend_type_reify_sccs;
+                }
+                if steps {
+                    type_ |= clingo_backend_type_e_clingo_backend_type_reify_steps;
+                }
+                type_
+            }
+            BackendType::Aspif => clingo_backend_type_e_clingo_backend_type_aspif,
+            BackendType::Smodels => clingo_backend_type_e_clingo_backend_type_smodels,
+        }
+    }
+}
 /// Enumeration of weight_constraint_types.
 #[derive(Debug, Copy, Clone)]
 pub enum WeigthConstraintType {
@@ -2079,6 +2114,122 @@ impl<C: ControlCtx> GenericControl<C> {
         if !unsafe { clingo_control_release_external(self.ctl.as_ptr(), literal) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_control_release_external() failed",
+            ));
+        }
+        Ok(())
+    }
+    /// Load files in aspif format.
+    ///
+    /// This function should be called on an empty control object.
+    ///
+    /// If more than one file is given, they are merged into one file. Only the first one should
+    /// have a preamble.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - the files to load
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if a file name contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    /// or [`ErrorCode::Runtime`] if parsing or checking fails
+    pub fn load_aspif(&mut self, files: &[&str]) -> Result<(), ClingoError> {
+        // create a vector of zero terminated strings
+        let mut l_files = vec![];
+        for file in files {
+            l_files.push(CString::new(*file)?);
+        }
+
+        // convert the strings to raw pointers
+        let mut c_files = l_files
+            .iter()
+            .map(|file| file.as_ptr())
+            .collect::<Vec<*const c_char>>();
+
+        if !unsafe {
+            clingo_control_load_aspif(self.ctl.as_ptr(), c_files.as_mut_ptr(), c_files.len())
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_load_aspif() failed",
+            ));
+        }
+        Ok(())
+    }
+    /// Register one of clingo's internal backends with the control object.
+    ///
+    /// This is similar to registering a [`GroundProgramObserver`] except that the grounding is
+    /// written to a file by the selected backend.
+    ///
+    /// # Arguments
+    ///
+    /// * `type_` - the kind of backend to register
+    /// * `file` - the file to write the result to
+    /// * `replace` - just pass the grounding to the backend but not the solver
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `file` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    /// or [`ErrorCode::Runtime`] if the file could not be opened
+    pub fn register_backend(
+        &mut self,
+        type_: BackendType,
+        file: &str,
+        replace: bool,
+    ) -> Result<(), ClingoError> {
+        let file = CString::new(file)?;
+        if !unsafe {
+            clingo_control_register_backend(
+                self.ctl.as_ptr(),
+                type_.to_raw(),
+                file.as_ptr(),
+                replace,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_register_backend() failed",
+            ));
+        }
+        Ok(())
+    }
+    /// Remove minimize constraints from the program.
+    ///
+    /// After this call, the program no longer contains any minimize constraints.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn remove_minimize(&mut self) -> Result<(), ClingoError> {
+        if !unsafe { clingo_control_remove_minimize(self.ctl.as_ptr()) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_remove_minimize() failed",
+            ));
+        }
+        Ok(())
+    }
+    /// Add to or replace the set of projection variables.
+    ///
+    /// # Arguments
+    ///
+    /// * `atoms` - the projection atoms to add or set
+    /// * `append` - whether to append to (true) or replace (false) any previously added
+    /// projection variables
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn update_project(&mut self, atoms: &[Atom], append: bool) -> Result<(), ClingoError> {
+        if !unsafe {
+            clingo_control_update_project(
+                self.ctl.as_ptr(),
+                atoms.as_ptr() as *const clingo_atom_t,
+                atoms.len(),
+                append,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_update_project() failed",
             ));
         }
         Ok(())
