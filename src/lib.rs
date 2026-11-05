@@ -3709,7 +3709,34 @@ impl SymbolicAtoms {
         Ok(signatures)
     }
 
-    // NODO: fn clingo_symbolic_atoms_is_valid()
+    /// Find a symbolic atom given its symbolic representation.
+    ///
+    /// Returns None if the atom is not in the program.
+    ///
+    /// # Arguments
+    ///
+    /// * `symbol` - the symbol to lookup
+    pub fn find(&self, Symbol(symbol): Symbol) -> Result<Option<SymbolicAtom>, ClingoError> {
+        let mut iterator = 0;
+        if !unsafe { clingo_symbolic_atoms_find(&self.0, symbol, &mut iterator) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_symbolic_atoms_find() failed",
+            ));
+        }
+        let mut valid = false;
+        if !unsafe { clingo_symbolic_atoms_is_valid(&self.0, iterator, &mut valid) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_symbolic_atoms_is_valid() failed",
+            ));
+        }
+        if !valid {
+            return Ok(None);
+        }
+        Ok(Some(SymbolicAtom {
+            cur: iterator,
+            atoms: &self.0,
+        }))
+    }
 }
 /// An iterator over symbolic atoms.
 pub struct SymbolicAtomsIterator<'a> {

@@ -887,6 +887,21 @@ fn control_update_project() {
     assert_eq!(models(ctl).len(), 4);
 }
 
+#[test]
+fn symbolic_atoms_find() {
+    let ctl = ground_base(vec![], "a. {b}. c :- d.");
+    let atoms = ctl.symbolic_atoms().unwrap();
+    let id = |name| Symbol::create_id(name, true).unwrap();
+
+    let a = atoms.find(id("a")).unwrap().expect("a should be found");
+    assert_eq!(a.symbol().unwrap(), id("a"));
+    assert!(a.is_fact().unwrap());
+    let b = atoms.find(id("b")).unwrap().expect("b should be found");
+    assert!(!b.is_fact().unwrap());
+    assert!(atoms.find(id("c")).unwrap().is_none());
+    assert!(atoms.find(id("x")).unwrap().is_none());
+}
+
 #[derive(Default)]
 struct StatementCollector {
     statements: Vec<String>,
