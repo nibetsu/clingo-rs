@@ -543,6 +543,41 @@ impl TheoryTermType {
     }
 }
 
+/// Enumeration of theory sequence types.
+///
+/// **See:** [`Backend::theory_term_sequence()`]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum TheorySequenceType {
+    /// A tuple term, e.g., `(1,2,3)`
+    Tuple = clingo_theory_sequence_type_e_clingo_theory_sequence_type_tuple as isize,
+    /// A set term, e.g., `{1,2,3}`
+    Set = clingo_theory_sequence_type_e_clingo_theory_sequence_type_set as isize,
+    /// A list term, e.g., `[1,2,3]`
+    List = clingo_theory_sequence_type_e_clingo_theory_sequence_type_list as isize,
+}
+
+/// Selects the program atom of a theory atom added with the [`Backend`].
+///
+/// **See:** [`Backend::theory_atom()`] and [`Backend::theory_atom_with_guard()`]
+#[derive(Debug, Copy, Clone)]
+pub enum TheoryAtomTarget {
+    /// The theory atom is a directive without a program atom
+    Directive,
+    /// The theory atom receives a fresh program atom
+    Fresh,
+    /// The theory atom receives the given program atom
+    Atom(Atom),
+}
+impl TheoryAtomTarget {
+    fn to_raw(self) -> clingo_atom_t {
+        match self {
+            TheoryAtomTarget::Directive => 0,
+            TheoryAtomTarget::Fresh => clingo_atom_t::MAX,
+            TheoryAtomTarget::Atom(Atom(atom)) => atom,
+        }
+    }
+}
+
 /// Enumeration for the different model types.
 #[derive(Debug, Copy, Clone)]
 pub enum ModelType {
@@ -3324,6 +3359,256 @@ impl<'a> Backend<'a> {
                 }
             }
         }
+    }
+
+    /// Add a numeric theory term.
+    ///
+    /// # Arguments
+    ///
+    /// * `number` - the value of the term
+    ///
+    /// **Returns** the resulting term id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_term_number(&mut self, number: i32) -> Result<Id, ClingoError> {
+        let mut term_id = 0;
+        if !unsafe { clingo_backend_theory_term_number(self.theref, number, &mut term_id) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_term_number() failed",
+            ));
+        }
+        Ok(Id(term_id))
+    }
+
+    /// Add a theory term representing a string.
+    ///
+    /// # Arguments
+    ///
+    /// * `string` - the value of the term
+    ///
+    /// **Returns** the resulting term id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `string` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_term_string(&mut self, string: &str) -> Result<Id, ClingoError> {
+        let string = CString::new(string)?;
+        let mut term_id = 0;
+        if !unsafe {
+            clingo_backend_theory_term_string(self.theref, string.as_ptr(), &mut term_id)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_term_string() failed",
+            ));
+        }
+        Ok(Id(term_id))
+    }
+
+    /// Add a theory term representing a sequence of theory terms.
+    ///
+    /// # Arguments
+    ///
+    /// * `type_` - the type of the sequence
+    /// * `arguments` - the term ids of the terms in the sequence
+    ///
+    /// **Returns** the resulting term id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_term_sequence(
+        &mut self,
+        type_: TheorySequenceType,
+        arguments: &[Id],
+    ) -> Result<Id, ClingoError> {
+        let mut term_id = 0;
+        if !unsafe {
+            clingo_backend_theory_term_sequence(
+                self.theref,
+                type_ as clingo_theory_sequence_type_t,
+                arguments.as_ptr() as *const clingo_id_t,
+                arguments.len(),
+                &mut term_id,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_term_sequence() failed",
+            ));
+        }
+        Ok(Id(term_id))
+    }
+
+    /// Add a theory term representing a function.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - the name of the function
+    /// * `arguments` - the term ids of the terms in the arguments
+    ///
+    /// **Returns** the resulting term id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `name` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_term_function(&mut self, name: &str, arguments: &[Id]) -> Result<Id, ClingoError> {
+        let name = CString::new(name)?;
+        let mut term_id = 0;
+        if !unsafe {
+            clingo_backend_theory_term_function(
+                self.theref,
+                name.as_ptr(),
+                arguments.as_ptr() as *const clingo_id_t,
+                arguments.len(),
+                &mut term_id,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_term_function() failed",
+            ));
+        }
+        Ok(Id(term_id))
+    }
+
+    /// Convert the given symbol into a theory term.
+    ///
+    /// # Arguments
+    ///
+    /// * `symbol` - the symbol to convert
+    ///
+    /// **Returns** the resulting term id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_term_symbol(&mut self, Symbol(symbol): Symbol) -> Result<Id, ClingoError> {
+        let mut term_id = 0;
+        if !unsafe { clingo_backend_theory_term_symbol(self.theref, symbol, &mut term_id) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_term_symbol() failed",
+            ));
+        }
+        Ok(Id(term_id))
+    }
+
+    /// Add a theory atom element.
+    ///
+    /// # Arguments
+    ///
+    /// * `tuple` - the term ids of the terms in the tuple
+    /// * `condition` - the program literals representing the condition
+    ///
+    /// **Returns** the resulting element id
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_element(
+        &mut self,
+        tuple: &[Id],
+        condition: &[SolverLiteral],
+    ) -> Result<Id, ClingoError> {
+        let mut element_id = 0;
+        if !unsafe {
+            clingo_backend_theory_element(
+                self.theref,
+                tuple.as_ptr() as *const clingo_id_t,
+                tuple.len(),
+                condition.as_ptr() as *const clingo_literal_t,
+                condition.len(),
+                &mut element_id,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_element() failed",
+            ));
+        }
+        Ok(Id(element_id))
+    }
+
+    /// Add a theory atom without a guard.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - selects the program atom of the theory atom
+    /// * `term` - the term id of the term associated with the theory atom
+    /// * `elements` - the element ids of the theory atom's elements
+    ///
+    /// **Returns** the final program atom of the theory atom
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_atom(
+        &mut self,
+        target: TheoryAtomTarget,
+        Id(term): Id,
+        elements: &[Id],
+    ) -> Result<Atom, ClingoError> {
+        let mut atom = 0;
+        if !unsafe {
+            clingo_backend_theory_atom(
+                self.theref,
+                target.to_raw(),
+                term,
+                elements.as_ptr() as *const clingo_id_t,
+                elements.len(),
+                &mut atom,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_atom() failed",
+            ));
+        }
+        Ok(Atom(atom))
+    }
+
+    /// Add a theory atom with a guard.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - selects the program atom of the theory atom
+    /// * `term` - the term id of the term associated with the theory atom
+    /// * `elements` - the element ids of the theory atom's elements
+    /// * `operator_name` - the string representation of a theory operator
+    /// * `right_hand_side` - the term id of the right hand side term
+    ///
+    /// **Returns** the final program atom of the theory atom
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `operator_name` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn theory_atom_with_guard(
+        &mut self,
+        target: TheoryAtomTarget,
+        Id(term): Id,
+        elements: &[Id],
+        operator_name: &str,
+        Id(right_hand_side): Id,
+    ) -> Result<Atom, ClingoError> {
+        let operator_name = CString::new(operator_name)?;
+        let mut atom = 0;
+        if !unsafe {
+            clingo_backend_theory_atom_with_guard(
+                self.theref,
+                target.to_raw(),
+                term,
+                elements.as_ptr() as *const clingo_id_t,
+                elements.len(),
+                operator_name.as_ptr(),
+                right_hand_side,
+                &mut atom,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_theory_atom_with_guard() failed",
+            ));
+        }
+        Ok(Atom(atom))
     }
 }
 

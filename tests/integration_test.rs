@@ -888,6 +888,52 @@ fn control_update_project() {
 }
 
 #[test]
+fn backend_theory_atoms() {
+    let mut ctl = control(vec![]).unwrap();
+    {
+        let mut backend = ctl.backend().unwrap();
+        let one = backend.theory_term_number(1).unwrap();
+        let x = backend.theory_term_string("x").unwrap();
+        let c = backend
+            .theory_term_symbol(Symbol::create_id("c", true).unwrap())
+            .unwrap();
+        let tuple = backend
+            .theory_term_sequence(TheorySequenceType::Tuple, &[one, x])
+            .unwrap();
+        let set = backend
+            .theory_term_sequence(TheorySequenceType::Set, &[one])
+            .unwrap();
+        let list = backend
+            .theory_term_sequence(TheorySequenceType::List, &[one])
+            .unwrap();
+        let f = backend.theory_term_function("f", &[one, c]).unwrap();
+        let condition = backend.add_atom(None).unwrap();
+        let element = backend
+            .theory_element(&[tuple, set, list, f], &[condition.into()])
+            .unwrap();
+
+        let sum = backend.theory_term_string("sum").unwrap();
+        let atom = backend
+            .theory_atom_with_guard(TheoryAtomTarget::Fresh, sum, &[element], "<=", one)
+            .unwrap();
+        assert_ne!(SolverLiteral::from(atom).get_integer(), 0);
+        let directive = backend.theory_term_string("directive").unwrap();
+        backend
+            .theory_atom(TheoryAtomTarget::Directive, directive, &[])
+            .unwrap();
+    }
+    let atoms = ctl.theory_atoms().unwrap();
+    let strings: Vec<String> = atoms
+        .iter()
+        .map(|atom| atoms.atom_to_string(atom).unwrap())
+        .collect();
+    // the sequence types also check the order of the set and list values changed in clingo 5.8
+    assert_eq!(
+        strings,
+        ["&sum{(1,x),{1},[1],f(1,c): #aux(1)}<=1", "&directive{}"]
+    );
+}
+#[test]
 fn symbolic_atoms_find() {
     let ctl = ground_base(vec![], "a. {b}. c :- d.");
     let atoms = ctl.symbolic_atoms().unwrap();
