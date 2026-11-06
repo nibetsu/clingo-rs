@@ -9,6 +9,13 @@ fn version() {
     assert!(re == 3);
 }
 #[test]
+fn error_and_warning_strings() {
+    assert_eq!(ErrorType::Runtime.to_string(), "runtime error");
+    assert_eq!(ErrorType::BadAlloc.to_string(), "bad allocation");
+    assert_eq!(Warning::AtomUndefined.to_string(), "atom undefined");
+    assert_eq!(Warning::FileIncluded.to_string(), "file included");
+}
+#[test]
 fn signature() {
     let a = Signature::new("a", 2, false).unwrap();
     let b = Signature::new("a", 2, false).unwrap();

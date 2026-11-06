@@ -84,6 +84,13 @@ pub enum ErrorType {
     /// Errors unrelated to clingo
     Unknown = clingo_error_e_clingo_error_unknown as isize,
 }
+impl fmt::Display for ErrorType {
+    /// Write the string representation clingo uses for the error type.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let char_ptr = unsafe { clingo_error_string(*self as clingo_error_t) };
+        write!(f, "{}", static_c_str(char_ptr))
+    }
+}
 /// Enumeration of clingo error codes for [`ClingoError::InternalError`].
 #[derive(Debug, Copy, Clone)]
 pub enum ErrorCode {
@@ -159,6 +166,16 @@ fn set_internal_error(code: ErrorType, message: &'static str) {
     // unwrap won't panic, because the function is only used internally on valid strings
     let message = CString::new(message).unwrap();
     unsafe { clingo_set_error(code as clingo_error_t, message.as_ptr()) }
+}
+
+/// Convert a string with static lifetime returned by clingo.
+fn static_c_str(char_ptr: *const c_char) -> &'static str {
+    if char_ptr.is_null() {
+        ""
+    } else {
+        let c_str = unsafe { CStr::from_ptr(char_ptr) };
+        c_str.to_str().unwrap_or("")
+    }
 }
 
 /// Create a slice from an array passed by clingo.
@@ -422,6 +439,13 @@ impl Warning {
                 })
             }
         }
+    }
+}
+impl fmt::Display for Warning {
+    /// Write the string representation clingo uses for the warning.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let char_ptr = unsafe { clingo_warning_string(*self as clingo_warning_t) };
+        write!(f, "{}", static_c_str(char_ptr))
     }
 }
 
