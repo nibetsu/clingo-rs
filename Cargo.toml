@@ -1,6 +1,6 @@
 [package]
 name = "clingo"
-version = "0.8.0"
+version = "0.9.0"
 publish = ["crates-io"]
 authors = ["sthiele <sthiele78@gmail.com>"]
 edition = "2021"

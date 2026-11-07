@@ -1,7 +1,7 @@
 # clingo-rs [![Build Status](https://github.com/potassco/clingo-rs/actions/workflows/test-ci.yml/badge.svg)](https://github.com/potassco/clingo-rs/actions/workflows/test-ci.yml) [![Latest Version](https://img.shields.io/crates/v/clingo.svg)](https://crates.io/crates/clingo) [![Rust Documentation](https://docs.rs/clingo/badge.svg)](https://docs.rs/clingo)
 
 Rust idiomatic bindings to the [clingo](https://github.com/potassco/clingo) library.
-Clingo version 5.6.2.
+Clingo version 5.8.3.
 
 ## Usage
 
@@ -33,14 +33,14 @@ To build clingo for static linking you need the following tools installed:
   - other compilers might work
 - the [cmake](https://www.cmake.org/) build system
   - at least version 3.18 is recommended
-  - at least version 3.1 is *required*
+  - at least version 3.10 is *required*
 
 The recommended way to use the optional static linking support is as
 follows.
 
 ```toml
 [dependencies]
-clingo = { version = "0.8.0", features = ["static-linking"] }
+clingo = { version = "0.9.0", features = ["static-linking"] }
 ```
 
 ### Using `derive` macro
@@ -51,7 +51,7 @@ In your `Cargo.toml` add:
 
 ```toml
 [dependencies]
-clingo = { version = "0.8.0", features = ["derive"] }
+clingo = { version = "0.9.0", features = ["derive"] }
 ```
 
 In your source write:

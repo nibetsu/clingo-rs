@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.9.0
+
+- Update to clingo-sys-0.8.0 (clingo 5.8.3)
+- Fix abort when parsing programs with comments or theory definitions
+  - Since clingo 5.7 comments are reported as statements
+  - Unexpected statement types are reported as errors instead of panicking
+- Fix undefined behavior for empty arrays passed by clingo
+- Fix PropagateInit::get_check_mode() for PropagatorCheckMode::Both
+- Add AST Comment node
+  - Add StatementIsA::Comment (breaking change for exhaustive matches)
+  - Add CommentType
+  - Add ast::comment()
+- Add Model::is_consequence() and Consequence
+- Add Model::priority()
+- Add SolveHandle::last()
+- Add PropagateInit::set_undo_mode(), PropagateInit::get_undo_mode() and PropagatorUndoMode
+- Add functions to Control
+  - Control::load_aspif()
+  - Control::register_backend() and BackendType
+  - Control::remove_minimize()
+  - Control::update_project()
+- Add SymbolicAtoms::find()
+- Add functions to Backend
+  - Backend::theory_term_number()
+  - Backend::theory_term_string()
+  - Backend::theory_term_sequence() and TheorySequenceType
+  - Backend::theory_term_function()
+  - Backend::theory_term_symbol()
+  - Backend::theory_element()
+  - Backend::theory_atom() and TheoryAtomTarget
+  - Backend::theory_atom_with_guard()
+- Implement Display for ErrorType and Warning
+
 ## v0.8.0
 
 - Update to clingo-sys-0.7.2 (clingo 5.6.2)
