@@ -2192,7 +2192,7 @@ impl<C: ControlCtx> GenericControl<C> {
     ///
     /// - [`ClingoError::NulError`] - if a file name contains a nul byte
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if parsing or checking fails
+    ///   or [`ErrorCode::Runtime`] if parsing or checking fails
     pub fn load_aspif(&mut self, files: &[&str]) -> Result<(), ClingoError> {
         // create a vector of zero terminated strings
         let mut l_files = vec![];
@@ -2230,7 +2230,7 @@ impl<C: ControlCtx> GenericControl<C> {
     ///
     /// - [`ClingoError::NulError`] - if `file` contains a nul byte
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if the file could not be opened
+    ///   or [`ErrorCode::Runtime`] if the file could not be opened
     pub fn register_backend(
         &mut self,
         type_: BackendType,
@@ -2273,7 +2273,7 @@ impl<C: ControlCtx> GenericControl<C> {
     ///
     /// * `atoms` - the projection atoms to add or set
     /// * `append` - whether to append to (true) or replace (false) any previously added
-    /// projection variables
+    ///   projection variables
     ///
     /// # Errors
     ///
@@ -4025,7 +4025,7 @@ impl SymbolicAtoms {
     /// # Arguments
     ///
     /// * `symbol` - the symbol to lookup
-    pub fn find(&self, Symbol(symbol): Symbol) -> Result<Option<SymbolicAtom>, ClingoError> {
+    pub fn find(&self, Symbol(symbol): Symbol) -> Result<Option<SymbolicAtom<'_>>, ClingoError> {
         let mut iterator = 0;
         if !unsafe { clingo_symbolic_atoms_find(&self.0, symbol, &mut iterator) } {
             return Err(ClingoError::new_internal(
@@ -4678,7 +4678,7 @@ impl Model {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if the size is too small
+    ///   or [`ErrorCode::Runtime`] if the size is too small
     pub fn priority(&self) -> Result<Vec<i32>, ClingoError> {
         let mut size: usize = 0;
         if !unsafe { clingo_model_cost_size(&self.0, &mut size) } {
@@ -5666,7 +5666,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn last(&mut self) -> Result<Option<&Model>, ClingoError> {
         let mut model = std::ptr::null_mut() as *const clingo_model_t;
         if !unsafe { clingo_solve_handle_last(self.handle.as_ptr(), &mut model) } {
