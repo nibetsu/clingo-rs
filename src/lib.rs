@@ -5792,24 +5792,20 @@ impl<C: ControlCtx, E: SolveEventHandler> Iterator for AllModels<C, E> {
     type Item = MModel;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            self.0.resume().expect("Failed resume on solve handle.");
-            match self.0.model() {
-                Ok(Some(model)) => {
-                    let symbols = model.symbols(ShowType::SHOWN).unwrap();
-                    let cost = model.cost().unwrap();
-                    return Some(MModel {
-                        symbols,
-                        cost,
-                        model_type: model.model_type().unwrap(),
-                        number: model.number().unwrap(),
-                    });
-                }
-                Ok(None) => {
-                    return None;
-                }
-                Err(e) => panic!("{}", e),
+        self.0.resume().expect("Failed resume on solve handle.");
+        match self.0.model() {
+            Ok(Some(model)) => {
+                let symbols = model.symbols(ShowType::SHOWN).unwrap();
+                let cost = model.cost().unwrap();
+                Some(MModel {
+                    symbols,
+                    cost,
+                    model_type: model.model_type().unwrap(),
+                    number: model.number().unwrap(),
+                })
             }
+            Ok(None) => None,
+            Err(e) => panic!("{}", e),
         }
     }
 }
