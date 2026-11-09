@@ -787,6 +787,29 @@ fn solve_handle_last() {
     assert!(handle.last().unwrap().is_none());
     handle.close().unwrap();
 }
+#[test]
+fn model_context() {
+    let ctl = ground_base(vec!["0".into()], "{a; b}.");
+    let a = atom_literal(&ctl, "a");
+    let mut handle = ctl.solve(SolveMode::YIELD, &[]).unwrap();
+    let mut models = vec![];
+    loop {
+        handle.resume().unwrap();
+        match handle.model_mut().unwrap() {
+            Some(model) => {
+                models.push(model.is_true(a).unwrap());
+                let context = model.context().unwrap();
+                assert_eq!(context.symbolic_atoms().unwrap().size().unwrap(), 2);
+                // all following models have to contain a
+                context.add_clause(&[a]).unwrap();
+            }
+            None => break,
+        }
+    }
+    handle.close().unwrap();
+    assert!(models.len() < 4);
+    assert!(models[1..].iter().all(|contains_a| *contains_a));
+}
 
 fn models(ctl: Control) -> Vec<Vec<String>> {
     let mut models = vec![];

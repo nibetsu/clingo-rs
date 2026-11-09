@@ -4743,9 +4743,9 @@ impl Model {
     /// Get the associated solve control object of a model.
     ///
     /// This object allows for adding clauses during model enumeration.
-    pub fn context(&self) -> Result<&mut SolveControl, ClingoError> {
-        let control_ptr = std::ptr::null_mut();
-        if !unsafe { clingo_model_context(&self.0, control_ptr) } {
+    pub fn context(&mut self) -> Result<&mut SolveControl, ClingoError> {
+        let mut control_ptr = std::ptr::null_mut();
+        if !unsafe { clingo_model_context(&self.0, &mut control_ptr) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_model_context() failed",
             ));
