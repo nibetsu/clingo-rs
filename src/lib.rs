@@ -5069,7 +5069,7 @@ impl PropagateControl {
     }
 
     /// Get the assignment associated with the underlying solver.
-    pub fn assignment_mut(&self) -> Result<&mut Assignment, ClingoError> {
+    pub fn assignment_mut(&mut self) -> Result<&mut Assignment, ClingoError> {
         match unsafe { (clingo_propagate_control_assignment(&self.0) as *mut Assignment).as_mut() }
         {
             Some(stm) => Ok(stm),
