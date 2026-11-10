@@ -516,9 +516,9 @@ struct TestAddWatch {
 }
 struct TestPropagator {
     inner: Rc<RefCell<TestAddWatch>>,
-    mutex: Mutex<u32>,
+    // whether thread 1 propagated b
+    done: Mutex<bool>,
     cv: Condvar,
-    done: bool,
 }
 impl Propagator for TestPropagator {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
@@ -576,20 +576,20 @@ impl Propagator for TestPropagator {
         assert_eq!(assignment.truth_value(b_).unwrap(), TruthValue::Free);
         assert_eq!(assignment.truth_value(c).unwrap(), TruthValue::True);
         assert_eq!(assignment.truth_value(d).unwrap(), TruthValue::False);
-        self.done = false;
+        *self.done.lock().unwrap() = false;
         true
     }
     fn propagate(&mut self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
         if ctl.thread_id() == 0 {
             // wait for thread 1 to propagate b
-            while !self.done {
-                let _mut_ = self.cv.wait(self.mutex.lock().unwrap()).unwrap();
+            let mut done = self.done.lock().unwrap();
+            while !*done {
+                done = self.cv.wait(done).unwrap();
             }
         } else {
             let mut s = (*self.inner).borrow_mut();
             for lit in changes {
-                let _mut_ = self.mutex.lock().unwrap();
-                self.done = true;
+                *self.done.lock().unwrap() = true;
                 if lit.get_integer() < 0 {
                     s.propagated.insert(lit.negate());
                 } else {
@@ -615,9 +615,8 @@ fn add_watch_propagator() {
         non: defaults::Non,
         propagator: TestPropagator {
             inner: p.clone(),
-            mutex: Mutex::new(0),
+            done: Mutex::new(false),
             cv: Condvar::new(),
-            done: false,
         },
     };
     let mut ctl = control_with_context(vec!["0".into()], ctrl_ctx).unwrap();
