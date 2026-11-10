@@ -348,17 +348,17 @@ impl<'a> Drop for AST<'a> {
     }
 }
 impl<'a> AST<'a> {
-    pub(crate) fn body(&self) -> Body {
+    pub(crate) fn body(&self) -> Body<'_> {
         Body(ASTArray {
             ast: self,
             index: 0,
         })
     }
-    pub(crate) fn head(&self) -> Head {
+    pub(crate) fn head(&self) -> Head<'_> {
         let ast = self.get_attribute_ast(ASTAttribute::Head).unwrap();
         Head { ast }
     }
-    pub(crate) fn term(&self) -> Term {
+    pub(crate) fn term(&self) -> Term<'_> {
         let ast = self.get_attribute_ast(ASTAttribute::Term).unwrap();
         Term { ast }
     }
@@ -367,12 +367,12 @@ impl<'a> AST<'a> {
         // TODO: check
         self.set_attribute_ast(ASTAttribute::Term, term).unwrap();
     }
-    pub(crate) fn guard(&self) -> TheoryGuard {
+    pub(crate) fn guard(&self) -> TheoryGuard<'_> {
         // TODO: check
         let ast = self.get_attribute_ast(ASTAttribute::Guard).unwrap();
         TheoryGuard { ast }
     }
-    pub(crate) fn elements(&self) -> &[TheoryAtomElement] {
+    pub(crate) fn elements(&self) -> &[TheoryAtomElement<'_>] {
         unimplemented!()
         // let ast = self.get_attribute_ast(ASTAttribute::Elements).unwrap();
         // &[]
@@ -404,7 +404,7 @@ impl<'a> AST<'a> {
     /// Create a shallow copy of an AST node.
     /// might set one of the following error codes:
     /// - ::clingo_error_bad_alloc
-    fn copy(&self) -> Result<AST, ClingoError> {
+    fn copy(&self) -> Result<AST<'_>, ClingoError> {
         let mut cpy = std::ptr::null_mut();
         if !unsafe { clingo_ast_copy(self.ptr.as_ptr(), &mut cpy) } {
             eprintln!("Call to clingo_ast_copy() failed");
@@ -920,7 +920,7 @@ impl<'a> AST<'a> {
         &self,
         attribute: ASTAttribute,
         index: usize,
-    ) -> Result<AST, ClingoError> {
+    ) -> Result<AST<'_>, ClingoError> {
         let mut ast = std::ptr::null_mut();
         if !unsafe {
             clingo_ast_attribute_get_ast_at(self.ptr.as_ptr(), attribute as i32, index, &mut ast)

@@ -930,10 +930,10 @@ impl<'a> BinaryOperation<'a> {
     // pub fn operator_type(&self) -> BinaryOperator {
     //     self.ast.operator_type()
     // }
-    pub fn left(&self) -> Term {
+    pub fn left(&self) -> Term<'_> {
         self.ast.left()
     }
-    pub fn right(&self) -> Term {
+    pub fn right(&self) -> Term<'_> {
         self.ast.right()
     }
 }
@@ -942,10 +942,10 @@ pub struct Interval<'a> {
     ast: AST<'a>,
 }
 impl<'a> Interval<'a> {
-    pub fn left(&self) -> Term {
+    pub fn left(&self) -> Term<'_> {
         self.ast.left()
     }
-    pub fn right(&self) -> Term {
+    pub fn right(&self) -> Term<'_> {
         self.ast.right()
     }
 }
@@ -1064,16 +1064,16 @@ impl<'a> TheoryAtom<'a> {
     pub fn to_string(&self) -> Result<String, ClingoError> {
         self.ast.to_string()
     }
-    pub fn term(&self) -> Term {
+    pub fn term(&self) -> Term<'_> {
         self.ast.term()
     }
     pub fn set_term(&mut self, term: Term) {
         self.ast.set_term(term)
     }
-    pub fn guard(&self) -> TheoryGuard {
+    pub fn guard(&self) -> TheoryGuard<'_> {
         self.ast.guard()
     }
-    pub fn elements(&self) -> &[TheoryAtomElement] {
+    pub fn elements(&self) -> &[TheoryAtomElement<'_>] {
         self.ast.elements()
     }
 }
@@ -1114,10 +1114,10 @@ impl<'a> Rule<'a> {
     pub fn location(&self) -> Location {
         self.ast.location().unwrap()
     }
-    pub fn body(&self) -> Body {
+    pub fn body(&self) -> Body<'_> {
         self.ast.body()
     }
-    pub fn head(&self) -> Head {
+    pub fn head(&self) -> Head<'_> {
         self.ast.head()
     }
 }
@@ -1420,7 +1420,7 @@ pub fn interval<'a, T1, T2>(
     location: &Location,
     left: T1,
     right: T2,
-) -> Result<Interval, ClingoError>
+) -> Result<Interval<'_>, ClingoError>
 where
     T1: Into<Term<'a>>,
     T2: Into<Term<'a>>,
@@ -2019,7 +2019,7 @@ pub fn theory_unparsed_term<'a>(
 }
 
 /// Construct an AST node of type `ASTType.TheoryGuard`.
-pub fn theory_guard<'a, T>(operator_name: &str, term: T) -> Result<TheoryGuard, ClingoError>
+pub fn theory_guard<'a, T>(operator_name: &str, term: T) -> Result<TheoryGuard<'_>, ClingoError>
 where
     T: Into<TheoryTerm<'a>>,
 {
@@ -2205,7 +2205,7 @@ pub fn basic_literal_from_boolean_constant(
     location: &Location,
     sign: Sign,
     value: bool,
-) -> Result<BasicLiteral, ClingoError> {
+) -> Result<BasicLiteral<'_>, ClingoError> {
     let mut ast = std::ptr::null_mut();
     let atom = boolean_constant(value)?;
 

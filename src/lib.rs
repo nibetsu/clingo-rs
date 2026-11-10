@@ -2569,7 +2569,7 @@ impl<C: ControlCtx> GenericControl<C> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    pub fn backend(&mut self) -> Result<Backend, ClingoError> {
+    pub fn backend(&mut self) -> Result<Backend<'_>, ClingoError> {
         let mut backend = std::ptr::null_mut();
         if !unsafe { clingo_control_backend(self.ctl.as_ptr(), &mut backend) } {
             return Err(ClingoError::new_internal(
@@ -3941,7 +3941,7 @@ impl SymbolicAtoms {
     }
 
     /// Get a forward iterator of the sequence of all symbolic atoms.
-    pub fn iter(&self) -> Result<SymbolicAtomsIterator, ClingoError> {
+    pub fn iter(&self) -> Result<SymbolicAtomsIterator<'_>, ClingoError> {
         let mut begin = 0;
         if !unsafe { clingo_symbolic_atoms_begin(&self.0, std::ptr::null(), &mut begin) } {
             return Err(ClingoError::new_internal(
@@ -3968,7 +3968,7 @@ impl SymbolicAtoms {
     pub fn iter_with_signature(
         &self,
         sig: Signature,
-    ) -> Result<SymbolicAtomsIterator, ClingoError> {
+    ) -> Result<SymbolicAtomsIterator<'_>, ClingoError> {
         let mut begin = 0;
         if !unsafe { clingo_symbolic_atoms_begin(&self.0, &sig.0, &mut begin) } {
             return Err(ClingoError::new_internal(
@@ -4160,7 +4160,7 @@ impl TheoryAtoms {
     }
 
     ///  Returns an iterator over the theory atoms.
-    pub fn iter(&self) -> TheoryAtomsIterator {
+    pub fn iter(&self) -> TheoryAtomsIterator<'_> {
         TheoryAtomsIterator {
             count: 0,
             atoms: self,
