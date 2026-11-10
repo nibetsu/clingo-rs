@@ -151,7 +151,7 @@ impl<'a> ProgramBuilder<'a> {
     /// # Errors
     ///
     /// - [`ClingoError`](struct.ClingoError.html) with [`ErrorCode::Runtime`](enum.ErrorCode.html#variant.Runtime) for statements of invalid form
-    /// or [`ErrorCode::BadAlloc`](enum.ErrorCode.html#variant.BadAlloc)
+    ///   or [`ErrorCode::BadAlloc`](enum.ErrorCode.html#variant.BadAlloc)
     pub fn add(&mut self, stm: &Statement) -> Result<(), ClingoError> {
         if !unsafe { clingo_program_builder_add(self.theref, stm.ast.ptr.as_ptr()) } {
             return Err(ClingoError::new_internal(

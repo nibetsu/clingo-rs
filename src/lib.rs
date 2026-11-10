@@ -1576,7 +1576,7 @@ impl Part {
     ///
     /// - [`ClingoError::NulError`] - if `name` contains a nul byte
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if argument parsing fails
+    ///   or [`ErrorCode::Runtime`] if argument parsing fails
     pub fn new(name: &str, params: Vec<Symbol>) -> Result<Part, ClingoError> {
         let name = internalize_string(name)?;
 
@@ -1963,7 +1963,7 @@ impl<C: ControlCtx> GenericControl<C> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving could not be started
+    ///   or [`ErrorCode::Runtime`] if solving could not be started
     pub fn solve(
         self,
         mode: SolveMode,
@@ -2009,7 +2009,7 @@ impl<C: ControlCtx> GenericControl<C> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving could not be started
+    ///   or [`ErrorCode::Runtime`] if solving could not be started
     pub fn solve_with_event_handler<T: SolveEventHandler>(
         self,
         mode: SolveMode,
@@ -2064,7 +2064,7 @@ impl<C: ControlCtx> GenericControl<C> {
     ///
     /// - [`ClingoError::NulError`] - if a any argument contains a nul byte
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if parsing fails
+    ///   or [`ErrorCode::Runtime`] if parsing fails
     pub fn add(
         &mut self,
         name: &str,
@@ -2621,7 +2621,7 @@ impl<C: ControlCtx> GenericControl<C> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving could not be started
+    ///   or [`ErrorCode::Runtime`] if solving could not be started
     pub fn all_models(self) -> Result<AllModels<C, defaults::Non>, ClingoError> {
         let mut handle = std::ptr::null_mut();
         let event_handler = std::ptr::null_mut();
@@ -2658,7 +2658,7 @@ impl<C: ControlCtx> GenericControl<C> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving could not be started
+    ///   or [`ErrorCode::Runtime`] if solving could not be started
     pub fn optimal_models(self) -> Result<OptimalModels<C, defaults::Non>, ClingoError> {
         let mut handle = std::ptr::null_mut();
         let event_handler = std::ptr::null_mut();
@@ -2706,7 +2706,7 @@ impl<C: ControlCtx> GenericControl<C> {
 ///
 /// - [`ClingoError::NulError`] - if an argument contains a nul byte
 /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-/// or [`ErrorCode::Runtime`] if argument parsing fails
+///   or [`ErrorCode::Runtime`] if argument parsing fails
 pub fn control(arguments: std::vec::Vec<String>) -> Result<Control, ClingoError> {
     let logger = None;
     let logger_data = std::ptr::null_mut();
@@ -2767,7 +2767,7 @@ pub fn control(arguments: std::vec::Vec<String>) -> Result<Control, ClingoError>
 ///
 /// - [`ClingoError::NulError`] - if an argument contains a nul byte
 /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-/// or [`ErrorCode::Runtime`] if argument parsing fails
+///   or [`ErrorCode::Runtime`] if argument parsing fails
 pub fn control_with_context<C: ControlCtx>(
     arguments: Vec<String>,
     mut context: C,
@@ -3260,7 +3260,7 @@ impl<'a> Backend<'a> {
     /// # Arguments
     ///
     /// * `literals` - the literals to assume (positive literals are true and negative literals
-    /// false for the next solve call)
+    ///   false for the next solve call)
     ///
     /// # Errors
     ///
@@ -3995,7 +3995,7 @@ impl SymbolicAtoms {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if the size is too small
+    ///   or [`ErrorCode::Runtime`] if the size is too small
     pub fn signatures(&self) -> Result<Vec<Signature>, ClingoError> {
         let mut size = 0;
         if !unsafe { clingo_symbolic_atoms_signatures_size(&self.0, &mut size) } {
@@ -4267,7 +4267,7 @@ impl TheoryAtoms {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] if the size is too small
-    /// or [`ErrorCode::BadAlloc`]
+    ///   or [`ErrorCode::BadAlloc`]
     /// - [`ClingoError::Utf8Error`]
     pub fn term_to_string(&self, Id(term): Id) -> Result<String, ClingoError> {
         let mut size = 0;
@@ -4363,7 +4363,7 @@ impl TheoryAtoms {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] if the size is too small
-    /// or [`ErrorCode::BadAlloc`]
+    ///   or [`ErrorCode::BadAlloc`]
     /// - [`ClingoError::Utf8Error`]
     pub fn element_to_string(&self, Id(element): Id) -> Result<String, ClingoError> {
         let mut size = 0;
@@ -4489,7 +4489,7 @@ impl TheoryAtoms {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] if the size is too small
-    /// or [`ErrorCode::BadAlloc`]
+    ///   or [`ErrorCode::BadAlloc`]
     /// - [`ClingoError::Utf8Error`]
     pub fn atom_to_string(&self, Id(atom): Id) -> Result<String, ClingoError> {
         let mut size = 0;
@@ -4573,7 +4573,7 @@ impl Model {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if the size is too small
+    ///   or [`ErrorCode::Runtime`] if the size is too small
     pub fn symbols(&self, show: ShowType) -> Result<Vec<Symbol>, ClingoError> {
         let mut size: usize = 0;
         if !unsafe { clingo_model_symbols_size(&self.0, show.bits(), &mut size) } {
@@ -4653,7 +4653,7 @@ impl Model {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if the size is too small
+    ///   or [`ErrorCode::Runtime`] if the size is too small
     ///
     /// **See:** [`Model::optimality_proven()`][`Statistics::statistics_type()`]
     pub fn cost(&self) -> Result<Vec<i64>, ClingoError> {
@@ -4776,7 +4776,7 @@ impl SolveControl {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if adding the clause fails
+    ///   or [`ErrorCode::Runtime`] if adding the clause fails
     pub fn add_clause(&mut self, clause: &[SolverLiteral]) -> Result<(), ClingoError> {
         if !unsafe {
             clingo_solve_control_add_clause(
@@ -4901,6 +4901,7 @@ impl Assignment {
     /// # Arguments
     ///
     /// * `literal` - the literal
+    ///
     /// **Returns** whether the literal is true (see [`Assignment::truth_value()`][`Statistics::statistics_type()`]
     pub fn is_true(&self, literal: SolverLiteral) -> Result<bool, ClingoError> {
         let mut is_true = false;
@@ -5091,7 +5092,7 @@ impl PropagateControl {
     /// **Errors:**
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Logic`] if the assignment is conflicting
+    ///   or [`ErrorCode::Logic`] if the assignment is conflicting
     pub fn add_literal(&mut self, result: &mut SolverLiteral) -> Result<(), ClingoError> {
         if !unsafe { clingo_propagate_control_add_literal(&mut self.0, &mut result.0) } {
             return Err(ClingoError::new_internal(
@@ -5112,7 +5113,7 @@ impl PropagateControl {
     /// **Errors:**
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Logic`] if the literal is invalid
+    ///   or [`ErrorCode::Logic`] if the literal is invalid
     ///
     /// **See:** [`PropagateControl::remove_watch()`]
     pub fn add_watch(&mut self, literal: SolverLiteral) -> Result<(), ClingoError> {
@@ -5387,6 +5388,7 @@ impl PropagateInit {
     /// # Arguments
     ///
     /// * `freeze` - whether to freeze the literal
+    ///
     /// **Returns** the added literal
     ///
     /// # Errors
@@ -5597,7 +5599,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn get(&mut self) -> Result<SolveResult, ClingoError> {
         let mut result = 0;
         if !unsafe { clingo_solve_handle_get(self.handle.as_ptr(), &mut result) } {
@@ -5634,7 +5636,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn model(&mut self) -> Result<Option<&Model>, ClingoError> {
         let mut model = std::ptr::null_mut() as *const clingo_model_t;
         if !unsafe { clingo_solve_handle_model(self.handle.as_ptr(), &mut model) } {
@@ -5649,7 +5651,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn model_mut(&mut self) -> Result<Option<&mut Model>, ClingoError> {
         let mut model = std::ptr::null_mut() as *const clingo_model_t;
         if !unsafe { clingo_solve_handle_model(self.handle.as_ptr(), &mut model) } {
@@ -5718,7 +5720,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn resume(&mut self) -> Result<(), ClingoError> {
         if !unsafe { clingo_solve_handle_resume(self.handle.as_ptr()) } {
             return Err(ClingoError::new_internal(
@@ -5732,7 +5734,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn cancel(&mut self) -> Result<(), ClingoError> {
         if !unsafe { clingo_solve_handle_cancel(self.handle.as_ptr()) } {
             return Err(ClingoError::new_internal(
@@ -5749,7 +5751,7 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    /// or [`ErrorCode::Runtime`] if solving fails
+    ///   or [`ErrorCode::Runtime`] if solving fails
     pub fn close(self) -> Result<GenericControl<C>, ClingoError> {
         if !unsafe { clingo_solve_handle_close(self.handle.as_ptr()) } {
             return Err(ClingoError::new_internal(
@@ -6062,7 +6064,7 @@ fn internalize_string(string: &str) -> Result<*const c_char, ClingoError> {
 ///
 /// - [`ClingoError::NulError`] - if `string` contains a nul byte
 /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-/// or [`ErrorCode::Runtime`] if parsing fails
+///   or [`ErrorCode::Runtime`] if parsing fails
 pub fn parse_term(string: &str) -> Result<Symbol, ClingoError> {
     let c_str = CString::new(string)?;
     let mut symbol = 0;
@@ -6089,7 +6091,7 @@ pub fn parse_term(string: &str) -> Result<Symbol, ClingoError> {
 ///
 /// - [`ClingoError::NulError`] - if `string` contains a nul byte
 /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-/// or [`ErrorCode::Runtime`] if parsing fails
+///   or [`ErrorCode::Runtime`] if parsing fails
 pub fn parse_term_with_logger<L: Logger>(
     string: &str,
     logger: &mut L,
@@ -6269,7 +6271,7 @@ pub trait GroundProgramObserver {
     /// # Arguments
     ///
     /// * `literals` - the literals to assume (positive literals are true and negative literals
-    /// false for the next solve call)
+    ///   false for the next solve call)
     ///
     /// **Returns** whether the call was successful
     fn assume(&mut self, _literals: &[SolverLiteral]) -> bool {
@@ -6339,7 +6341,7 @@ pub trait GroundProgramObserver {
     /// - if it is -2, then it is a set
     /// - if it is -3, then it is a list
     /// - otherwise, it is a function and name_id_or_type refers to the id of the name (in form of a
-    /// string term)
+    ///   string term)
     ///
     /// # Arguments
     ///
