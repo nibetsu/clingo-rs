@@ -331,13 +331,9 @@ impl<'a> Clone for AST<'a> {
 use std::fmt;
 impl<'a> fmt::Display for AST<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let x = self.to_string();
-        match x {
+        match self.to_string() {
             Ok(string) => write!(f, "{}", string),
-            Err(e) => {
-                eprintln!("{}", e);
-                Err(fmt::Error)
-            }
+            Err(_) => Err(fmt::Error),
         }
     }
 }

@@ -1275,23 +1275,15 @@ impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut size: usize = 0;
         if !unsafe { clingo_symbol_to_string_size(self.0, &mut size) } {
-            eprintln!("Call to clingo_symbol_to_string_size() failed");
             return Err(fmt::Error);
         }
         let mut string = Vec::with_capacity(size);
         let string_ptr = string.as_mut_ptr();
         if !unsafe { clingo_symbol_to_string(self.0, string_ptr, size) } {
-            eprintln!("Call to clingo_symbol_to_string() failed");
             return Err(fmt::Error);
         }
         let c_str: &CStr = unsafe { CStr::from_ptr(string_ptr) };
-        let str_slice: &str = match c_str.to_str() {
-            Ok(slice) => slice,
-            Err(e) => {
-                eprintln!("{}", e);
-                return Err(fmt::Error);
-            }
-        };
+        let str_slice = c_str.to_str().map_err(|_| fmt::Error)?;
         std::fmt::Display::fmt(str_slice, f)
     }
 }
