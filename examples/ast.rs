@@ -104,7 +104,7 @@ fn main() {
     let ext = ast::external(&loc, atom.clone(), &[], ExternalType::False).unwrap();
 
     builder
-        .add(&mut ext.into())
+        .add(&ext.into())
         .expect("Failed to add statement to ProgramBuilder.");
 
     let mut stm_handler = OnStatementData {

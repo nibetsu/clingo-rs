@@ -45,7 +45,7 @@ pub mod derive {
             u_32: 1,
             tup: (47, "bum".to_string()),
             str1: false,
-            str2: &"ddbb",
+            str2: "ddbb",
         };
         let s1 = bla.symbol().unwrap();
         let s2 = clingo::parse_term("bla(test,\"bala\",1,(47,\"bum\"),false,\"ddbb\")").unwrap();

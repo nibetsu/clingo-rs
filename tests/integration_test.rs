@@ -170,7 +170,7 @@ fn test_statement(stmt: &Statement, string: &str) {
     let mut builder = ast::ProgramBuilder::from(&mut ctl).unwrap();
 
     builder
-        .add(&stmt)
+        .add(stmt)
         .expect("Failed to add statement to ProgramBuilder.");
 
     // finish building a program
@@ -185,8 +185,7 @@ fn test_statement(stmt: &Statement, string: &str) {
         .expect("Failed to ground a logic program.");
 
     let atoms = ctl.symbolic_atoms().unwrap();
-    let mut atoms_iterator = atoms.iter().unwrap();
-    while let Some(item) = atoms_iterator.next() {
+    for item in atoms.iter().unwrap() {
         let symbol = item.symbol().unwrap();
         let string2 = symbol.to_string();
         println!("{}", string2);
@@ -359,7 +358,7 @@ fn ast_body_literal() {
     let th_term = symbolic_term(&loc, &sym).unwrap();
     let tuple = [th_term.clone().into()];
     let element = theory_atom_element(&tuple, &condition).unwrap();
-    let elements = [element.into()];
+    let elements = [element];
     let guard = theory_guard("theory_operator", th_term).unwrap();
     let tatom = theory_atom(&loc, term1.clone(), &elements, Some(guard)).unwrap();
     let blit: BodyLiteral = lit.into();
@@ -517,7 +516,7 @@ fn ast_external() {
     let sym = Symbol::create_id("test", true).unwrap();
     let term = symbolic_term(&loc, &sym).unwrap();
     let atom = symbolic_atom(term).unwrap();
-    let ext = external(&loc, atom.into(), &[], ExternalType::False).unwrap();
+    let ext = external(&loc, atom, &[], ExternalType::False).unwrap();
     let stm = ext.into();
     test_statement(&stm, "#external test. [false]");
 }
@@ -595,8 +594,8 @@ fn ast_rule() {
     let xor = BinaryOperator::Xor;
     let bop1 = binary_operation(&loc, xor, term9, term10).unwrap();
 
-    let mut args = [bop1.into()];
-    let fun1 = function(&loc, "fun1", &mut args, false).unwrap();
+    let args = [bop1.into()];
+    let fun1 = function(&loc, "fun1", &args, false).unwrap();
 
     let gt = ComparisonOperator::GreaterThan;
     let guard = guard(gt, term2).unwrap();
@@ -1020,7 +1019,7 @@ fn ast_parse_theory_definition() {
     struct TheoryDefinitionCheck;
     impl StatementHandler for TheoryDefinitionCheck {
         fn on_statement(&mut self, stm: &Statement) -> bool {
-            !matches!(stm.clone().is_a(), Err(_))
+            stm.clone().is_a().is_ok()
         }
     }
     parse_string_with_statement_handler(

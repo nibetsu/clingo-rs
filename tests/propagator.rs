@@ -15,7 +15,7 @@ fn get_arg(sym: &Symbol, offset: usize) -> Result<i32, ClingoError> {
     // get the arguments of the function symbol
     let args = sym.arguments().unwrap();
     // get the requested numeric argument
-    args[offset as usize].number()
+    args[offset].number()
 }
 
 struct CtrlCtx<P: Propagator> {
@@ -93,14 +93,14 @@ impl Propagator for PigeonPropagator {
 
                 // get an iterator for place/2 atoms
                 // (atom order corresponds to grounding order (and is unpredictable))
-                let mut atoms_iterator = atoms.iter_with_signature(sig).unwrap();
+                let atoms_iterator = atoms.iter_with_signature(sig).unwrap();
 
                 if pass == 1 {
                     // allocate memory for the assignment literal -> hole mapping
                     self.pigeons = vec![0; max + 1];
                 }
 
-                while let Some(item) = atoms_iterator.next() {
+                for item in atoms_iterator {
                     // get the solver literal for the placement atom
                     let lit = init.solver_literal(item.literal().unwrap()).unwrap();
                     let lit_id = lit.get_integer() as usize;
@@ -135,11 +135,11 @@ impl Propagator for PigeonPropagator {
         }
 
         // initialize the per solver thread state information
-        for i in 0..threads {
+        for state in self.states.iter().take(threads) {
             // initially no pigeons are assigned to any holes
             // so the hole -> literal mapping is initialized with zero
             // which is not a valid literal
-            (*self.states[i]).borrow_mut().holes = vec![None; holes as usize];
+            (**state).borrow_mut().holes = vec![None; holes as usize];
         }
         true
     }
@@ -177,8 +177,7 @@ impl Propagator for PigeonPropagator {
                         return true;
                     }
 
-                    // must not happen because the clause above is conflicting by construction
-                    assert!(false);
+                    unreachable!("the clause above is conflicting by construction");
                 }
             };
         }
@@ -203,9 +202,11 @@ impl Propagator for PigeonPropagator {
     }
 }
 
+type Models = Vec<Vec<String>>;
+
 fn solve<P: Propagator>(
     ctl: GenericControl<CtrlCtx<P>>,
-) -> Result<(Vec<Vec<String>>, GenericControl<CtrlCtx<P>>), ClingoError> {
+) -> Result<(Models, GenericControl<CtrlCtx<P>>), ClingoError> {
     let mut ret = Vec::<Vec<String>>::new();
     // get a solve handle
     let mut handle = ctl
@@ -254,7 +255,7 @@ fn pigeon_propagator(holes: i32, pigeons: i32, number_of_models: usize) {
 
     ctl.add(
         "pigeon",
-        &vec!["h", "p"],
+        &["h", "p"],
         "1 { place(P,H) : H = 1..h } 1 :- P = 1..p.",
     )
     .expect("Failed to add a logic program.");

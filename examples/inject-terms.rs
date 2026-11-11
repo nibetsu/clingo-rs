@@ -23,12 +23,12 @@ impl FunctionHandler for MyEFH {
         name: &str,
         arguments: &[Symbol],
     ) -> Result<Vec<Symbol>, ExternalError> {
-        if name == "c" && arguments.len() == 0 {
+        if name == "c" && arguments.is_empty() {
             Ok(vec![Symbol::create_number(42), Symbol::create_number(43)])
         } else {
-            return Err(ExternalError {
+            Err(ExternalError {
                 msg: "function not found",
-            });
+            })
         }
     }
 }
