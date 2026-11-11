@@ -6760,7 +6760,7 @@ unsafe extern "C" fn unsafe_theory_atom_with_guard<T: GroundProgramObserver>(
     )
 }
 
-/// helper types and traits to simplify conversion from structs to clingo symbols
+// helper types and traits to simplify conversion from structs to clingo symbols
 
 pub trait ToSymbol {
     fn symbol(&self) -> Result<Symbol, ClingoError>;

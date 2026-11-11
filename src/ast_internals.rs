@@ -3,7 +3,7 @@ use crate::{ClingoError, Symbol};
 use clingo_sys::*;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
-use std::{ffi::CStr, u32};
+use std::ffi::CStr;
 
 #[derive(Debug, Clone)]
 pub struct Body<'a>(ASTArray<'a>);
@@ -30,7 +30,6 @@ impl<'a> ASTArray<'a> {
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-
     pub(crate) fn size(&self) -> Result<usize, ClingoError> {
         let mut size: usize = 0;
         if !unsafe {
