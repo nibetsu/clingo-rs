@@ -1163,18 +1163,23 @@ impl PartialEq for Signature {
 }
 impl Eq for Signature {}
 impl PartialOrd for Signature {
+    fn partial_cmp(&self, other: &Signature) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Signature {
     /// Compare two signatures.
     ///
     /// Signatures are compared first by sign (unsigned < signed), then by arity,
     /// then by name.
-    fn partial_cmp(&self, other: &Signature) -> Option<Ordering> {
+    fn cmp(&self, other: &Signature) -> Ordering {
         if unsafe { clingo_signature_is_less_than(self.0, other.0) } {
-            return Some(Ordering::Less);
+            return Ordering::Less;
         }
         if unsafe { clingo_signature_is_less_than(other.0, self.0) } {
-            return Some(Ordering::Greater);
+            return Ordering::Greater;
         }
-        Some(Ordering::Equal)
+        Ordering::Equal
     }
 }
 impl Hash for Signature {
@@ -1250,19 +1255,24 @@ impl PartialEq for Symbol {
 }
 impl Eq for Symbol {}
 impl PartialOrd for Symbol {
+    fn partial_cmp(&self, other: &Symbol) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Symbol {
     /// Compare two symbols.
     ///
     /// Symbols are first compared by type.  If the types are equal, the values are
     /// compared (where strings are compared using strcmp).  Functions are first
     /// compared by signature and then lexicographically by arguments.
-    fn partial_cmp(&self, other: &Symbol) -> Option<Ordering> {
+    fn cmp(&self, other: &Symbol) -> Ordering {
         if unsafe { clingo_symbol_is_less_than(self.0, other.0) } {
-            return Some(Ordering::Less);
+            return Ordering::Less;
         }
         if unsafe { clingo_symbol_is_less_than(other.0, self.0) } {
-            return Some(Ordering::Greater);
+            return Ordering::Greater;
         }
-        Some(Ordering::Equal)
+        Ordering::Equal
     }
 }
 impl Hash for Symbol {
