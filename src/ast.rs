@@ -7,7 +7,6 @@ use crate::ast_internals::Body;
 use crate::ast_internals::{ASTType, Ast};
 use clingo_sys::*;
 use std::ffi::CStr;
-use std::ffi::NulError;
 use std::str::Utf8Error;
 use std::{
     ffi::CString,
@@ -27,14 +26,15 @@ pub struct Location(pub(crate) clingo_location);
 impl Default for Location {
     /// Create a default location.
     fn default() -> Self {
-        let file = CString::new("").unwrap();
+        // a static string because the location only stores a pointer
+        let file = c"".as_ptr();
         Location(clingo_location {
             begin_line: 0,
             end_line: 0,
             begin_column: 0,
             end_column: 0,
-            begin_file: file.as_ptr(),
-            end_file: file.as_ptr(),
+            begin_file: file,
+            end_file: file,
         })
     }
 }
@@ -52,7 +52,8 @@ impl Location {
     ///
     /// # Errors
     ///
-    /// - [`ClingoError::NulError`](enum.ClingoError.html#variant.NulError) - if `begin_file` `end_file` or contain a nul byte
+    /// - [`ClingoError::NulError`] - if `begin_file` or `end_file` contain a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`](crate::ErrorCode::BadAlloc)
     pub fn new(
         begin_file: &str,
         end_file: &str,
@@ -60,16 +61,15 @@ impl Location {
         end_line: usize,
         begin_column: usize,
         end_column: usize,
-    ) -> Result<Location, NulError> {
-        let begin_file = CString::new(begin_file)?;
-        let end_file = CString::new(end_file)?;
+    ) -> Result<Location, ClingoError> {
+        // the location only stores pointers, so the file names have to outlive it
         let loc = clingo_location {
             begin_line,
             end_line,
             begin_column,
             end_column,
-            begin_file: begin_file.as_ptr(),
-            end_file: end_file.as_ptr(),
+            begin_file: internalize_string(begin_file)?,
+            end_file: internalize_string(end_file)?,
         };
         Ok(Location(loc))
     }

@@ -1070,3 +1070,24 @@ fn ast_parse_theory_definition() {
 //     t.compile_fail("tests/ui/ast_statement_from_rule.rs");
 //     //check builder.add(stmt)
 // }
+#[test]
+fn ast_location() {
+    let location = Location::new("a.lp", "b.lp", 2, 3, 4, 5).unwrap();
+    // the file names must still be valid after other allocations
+    let _other = vec![String::from("x"); 100];
+    assert_eq!(location.begin_file().unwrap(), "a.lp");
+    assert_eq!(location.end_file().unwrap(), "b.lp");
+    assert_eq!(
+        (
+            location.begin_line(),
+            location.end_line(),
+            location.begin_column(),
+            location.end_column()
+        ),
+        (2, 3, 4, 5)
+    );
+    assert!(Location::new("a\0", "b", 0, 0, 0, 0).is_err());
+    let location = Location::default();
+    assert_eq!(location.begin_file().unwrap(), "");
+    assert_eq!(location.end_file().unwrap(), "");
+}
