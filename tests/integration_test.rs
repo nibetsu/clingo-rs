@@ -1091,3 +1091,224 @@ fn ast_location() {
     assert_eq!(location.begin_file().unwrap(), "");
     assert_eq!(location.end_file().unwrap(), "");
 }
+
+/// Call `f` for each statement of `program` except the initial `#program base.`
+///
+/// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
+fn for_each_statement(program: &str, f: impl FnMut(&Statement)) {
+    struct Handler<F> {
+        f: F,
+        panic: Option<Box<dyn std::any::Any + Send>>,
+    }
+    impl<F: FnMut(&Statement)> StatementHandler for Handler<F> {
+        fn on_statement(&mut self, stm: &Statement) -> bool {
+            if Node::from(stm.clone()).node_type().unwrap() == NodeType::Program {
+                return true;
+            }
+            let f = &mut self.f;
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(stm))) {
+                Ok(()) => true,
+                Err(panic) => {
+                    self.panic = Some(panic);
+                    false
+                }
+            }
+        }
+    }
+    let mut handler = Handler { f, panic: None };
+    let result = parse_string_with_statement_handler(program, &mut handler);
+    if let Some(panic) = handler.panic {
+        std::panic::resume_unwind(panic);
+    }
+    result.unwrap();
+}
+#[test]
+fn ast_node_number_and_types() {
+    let mut count = 0;
+    for_each_statement("a :- b.", |stm| {
+        count += 1;
+        let mut rule = Node::from(stm.clone());
+        assert_eq!(rule.node_type().unwrap(), NodeType::Rule);
+        assert!(rule.has_attribute(Attribute::Head).unwrap());
+        assert!(!rule.has_attribute(Attribute::Name).unwrap());
+        assert_eq!(
+            rule.attribute_type(Attribute::Head).unwrap(),
+            AttributeType::Ast
+        );
+        assert_eq!(
+            rule.attribute_type(Attribute::Body).unwrap(),
+            AttributeType::AstArray
+        );
+        assert!(rule.attribute_type(Attribute::Name).is_err());
+
+        let mut literal = rule.get_ast_at(Attribute::Body, 0).unwrap();
+        assert_eq!(literal.node_type().unwrap(), NodeType::Literal);
+        assert_eq!(literal.get_number(Attribute::Sign).unwrap(), Sign::NoSign as i32);
+        literal
+            .set_number(Attribute::Sign, Sign::Negation as i32)
+            .unwrap();
+        // the literal is shared with the rule
+        assert_eq!(rule.to_string().unwrap(), "a :- not b.");
+        assert!(rule.set_number(Attribute::Sign, 0).is_err());
+    });
+    assert_eq!(count, 1);
+}
+#[test]
+fn ast_node_symbol_string_location() {
+    for_each_statement("p(1).", |stm| {
+        let rule = Node::from(stm.clone());
+        let literal = rule.get_ast(Attribute::Head).unwrap();
+        let atom = literal.get_ast(Attribute::Atom).unwrap();
+        let mut function = atom.get_ast(Attribute::Symbol).unwrap();
+        assert_eq!(function.node_type().unwrap(), NodeType::Function);
+        assert_eq!(function.get_string(Attribute::Name).unwrap(), "p");
+        function.set_string(Attribute::Name, "q").unwrap();
+
+        let mut term = function.get_ast_at(Attribute::Arguments, 0).unwrap();
+        assert_eq!(term.node_type().unwrap(), NodeType::SymbolicTerm);
+        assert_eq!(
+            term.get_symbol(Attribute::Symbol).unwrap(),
+            Symbol::create_number(1)
+        );
+        term.set_symbol(Attribute::Symbol, Symbol::create_number(2))
+            .unwrap();
+        assert_eq!(rule.to_string().unwrap(), "q(2).");
+
+        let mut rule = rule;
+        let location = rule.get_location(Attribute::Location).unwrap();
+        assert_eq!(location.begin_line(), 1);
+        let new_location = Location::new("a.lp", "b.lp", 2, 3, 4, 5).unwrap();
+        rule.set_location(Attribute::Location, &new_location)
+            .unwrap();
+        let location = rule.get_location(Attribute::Location).unwrap();
+        assert_eq!(location.begin_file().unwrap(), "a.lp");
+        assert_eq!(location.end_file().unwrap(), "b.lp");
+        assert_eq!(
+            (
+                location.begin_line(),
+                location.end_line(),
+                location.begin_column(),
+                location.end_column()
+            ),
+            (2, 3, 4, 5)
+        );
+    });
+}
+#[test]
+fn ast_node_ast_array() {
+    for_each_statement("a :- b; c.", |stm| {
+        let mut rule = Node::from(stm.clone());
+        assert_eq!(rule.ast_array_size(Attribute::Body).unwrap(), 2);
+        let c = rule.get_ast_at(Attribute::Body, 1).unwrap();
+        rule.delete_ast_at(Attribute::Body, 0).unwrap();
+        assert_eq!(rule.to_string().unwrap(), "a :- c.");
+        rule.insert_ast_at(Attribute::Body, 1, &c).unwrap();
+        assert_eq!(rule.to_string().unwrap(), "a :- c; c.");
+        let head = rule.get_ast(Attribute::Head).unwrap();
+        rule.set_ast_at(Attribute::Body, 0, &head).unwrap();
+        assert_eq!(rule.to_string().unwrap(), "a :- a; c.");
+        rule.set_ast(Attribute::Head, &c).unwrap();
+        assert_eq!(rule.to_string().unwrap(), "c :- a; c.");
+        assert_eq!(rule.ast_array_size(Attribute::Body).unwrap(), 2);
+
+        // clingo does not check indices, the wrapper has to
+        assert!(rule.get_ast_at(Attribute::Body, 2).is_err());
+        assert!(rule.set_ast_at(Attribute::Body, 2, &c).is_err());
+        assert!(rule.delete_ast_at(Attribute::Body, 2).is_err());
+        assert!(rule.insert_ast_at(Attribute::Body, 3, &c).is_err());
+        rule.insert_ast_at(Attribute::Body, 2, &c).unwrap();
+        assert_eq!(rule.ast_array_size(Attribute::Body).unwrap(), 3);
+    });
+}
+#[test]
+fn ast_node_optional_ast() {
+    for_each_statement("{ a }.", |stm| {
+        let rule = Node::from(stm.clone());
+        let mut aggregate = rule.get_ast(Attribute::Head).unwrap();
+        assert_eq!(aggregate.node_type().unwrap(), NodeType::Aggregate);
+        assert!(aggregate
+            .get_optional_ast(Attribute::LeftGuard)
+            .unwrap()
+            .is_none());
+
+        let loc = Location::default();
+        let one = symbolic_term(&loc, &Symbol::create_number(1)).unwrap();
+        let guard = Node::from(guard(ComparisonOperator::LessEqual, one).unwrap());
+        aggregate
+            .set_optional_ast(Attribute::LeftGuard, Some(&guard))
+            .unwrap();
+        assert_eq!(rule.to_string().unwrap(), "1 <= { a }.");
+        let left_guard = aggregate
+            .get_optional_ast(Attribute::LeftGuard)
+            .unwrap()
+            .unwrap();
+        assert_eq!(left_guard.node_type().unwrap(), NodeType::Guard);
+
+        aggregate
+            .set_optional_ast(Attribute::LeftGuard, None)
+            .unwrap();
+        assert_eq!(rule.to_string().unwrap(), "{ a }.");
+    });
+}
+#[test]
+fn ast_node_string_array() {
+    for_each_statement("&a { - x }.", |stm| {
+        let rule = Node::from(stm.clone());
+        let atom = rule.get_ast(Attribute::Head).unwrap();
+        let element = atom.get_ast_at(Attribute::Elements, 0).unwrap();
+        let term = element.get_ast_at(Attribute::Terms, 0).unwrap();
+        assert_eq!(term.node_type().unwrap(), NodeType::TheoryUnparsedTerm);
+        let mut unparsed = term.get_ast_at(Attribute::Elements, 0).unwrap();
+        assert_eq!(
+            unparsed.node_type().unwrap(),
+            NodeType::TheoryUnparsedTermElement
+        );
+        assert_eq!(
+            unparsed.attribute_type(Attribute::Operators).unwrap(),
+            AttributeType::StringArray
+        );
+        assert_eq!(unparsed.string_array_size(Attribute::Operators).unwrap(), 1);
+        assert_eq!(unparsed.get_string_at(Attribute::Operators, 0).unwrap(), "-");
+
+        unparsed
+            .set_string_at(Attribute::Operators, 0, "~")
+            .unwrap();
+        unparsed
+            .insert_string_at(Attribute::Operators, 1, "+")
+            .unwrap();
+        assert_eq!(unparsed.string_array_size(Attribute::Operators).unwrap(), 2);
+        assert_eq!(unparsed.get_string_at(Attribute::Operators, 1).unwrap(), "+");
+        assert_eq!(rule.to_string().unwrap(), "&a { (~ + x) }.");
+        unparsed.delete_string_at(Attribute::Operators, 0).unwrap();
+        assert_eq!(rule.to_string().unwrap(), "&a { (+ x) }.");
+
+        // clingo does not check indices, the wrapper has to
+        assert!(unparsed.get_string_at(Attribute::Operators, 1).is_err());
+        assert!(unparsed
+            .set_string_at(Attribute::Operators, 1, "-")
+            .is_err());
+        assert!(unparsed.delete_string_at(Attribute::Operators, 1).is_err());
+        assert!(unparsed
+            .insert_string_at(Attribute::Operators, 2, "-")
+            .is_err());
+    });
+}
+#[test]
+fn ast_node_copy_and_statement() {
+    for_each_statement("a :- b.", |stm| {
+        let rule = Node::from(stm.clone());
+        let deep = rule.clone();
+        let shallow = rule.copy().unwrap();
+        let mut literal = shallow.get_ast_at(Attribute::Body, 0).unwrap();
+        literal
+            .set_number(Attribute::Sign, Sign::Negation as i32)
+            .unwrap();
+        // a shallow copy shares its children
+        assert_eq!(rule.to_string().unwrap(), "a :- not b.");
+        assert_eq!(deep.to_string().unwrap(), "a :- b.");
+
+        let statement = Statement::try_from(deep).unwrap();
+        assert_eq!(statement.to_string().unwrap(), "a :- b.");
+        assert!(Statement::try_from(literal).is_err());
+    });
+}

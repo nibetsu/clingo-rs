@@ -3,7 +3,8 @@ use crate::{ClingoError, Symbol};
 use clingo_sys::*;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
-use std::ffi::CStr;
+use crate::{set_internal_error, ErrorType};
+use std::ffi::{CStr, CString};
 
 #[derive(Debug, Clone)]
 pub struct Body<'a>(ASTArray<'a>);
@@ -35,7 +36,7 @@ impl<'a> ASTArray<'a> {
         if !unsafe {
             clingo_ast_attribute_size_ast_array(
                 self.ast.ptr.as_ptr(),
-                ASTAttribute::Body as i32,
+                Attribute::Body as i32,
                 &mut size,
             )
         } {
@@ -58,7 +59,7 @@ impl<'a> Iterator for ASTArray<'a> {
 
         if let Ok(ast) = self
             .ast
-            .get_attribute_ast_at(ASTAttribute::Body, self.index)
+            .get_attribute_ast_at(Attribute::Body, self.index)
         {
             self.index += 1;
             Some(ast)
@@ -68,9 +69,9 @@ impl<'a> Iterator for ASTArray<'a> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-/// Enumeration of AST types.
-pub(crate) enum ASTType {
+/// Enumeration of AST node types.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum NodeType {
     Id = clingo_ast_type_e_clingo_ast_type_id as isize,
     Variable = clingo_ast_type_e_clingo_ast_type_variable as isize,
     SymbolicTerm = clingo_ast_type_e_clingo_ast_type_symbolic_term as isize,
@@ -82,6 +83,7 @@ pub(crate) enum ASTType {
     BooleanConstant = clingo_ast_type_e_clingo_ast_type_boolean_constant as isize,
     SymbolicAtom = clingo_ast_type_e_clingo_ast_type_symbolic_atom as isize,
     Comparison = clingo_ast_type_e_clingo_ast_type_comparison as isize,
+    Guard = clingo_ast_type_e_clingo_ast_type_guard as isize,
     ConditionalLiteral = clingo_ast_type_e_clingo_ast_type_conditional_literal as isize,
     Aggregate = clingo_ast_type_e_clingo_ast_type_aggregate as isize,
     BodyAggregateElement = clingo_ast_type_e_clingo_ast_type_body_aggregate_element as isize,
@@ -119,73 +121,95 @@ pub(crate) enum ASTType {
     TheoryDefinition = clingo_ast_type_e_clingo_ast_type_theory_definition as isize,
     Comment = clingo_ast_type_e_clingo_ast_type_comment as isize,
 }
-impl ASTType {
-    fn try_from(code: u32) -> Result<ASTType, ClingoError> {
+impl NodeType {
+    /// Whether nodes of this type are statements.
+    pub fn is_statement(self) -> bool {
+        matches!(
+            self,
+            NodeType::Rule
+                | NodeType::Definition
+                | NodeType::ShowSignature
+                | NodeType::Defined
+                | NodeType::ShowTerm
+                | NodeType::Minimize
+                | NodeType::Script
+                | NodeType::Program
+                | NodeType::External
+                | NodeType::Edge
+                | NodeType::Heuristic
+                | NodeType::ProjectAtom
+                | NodeType::ProjectSignature
+                | NodeType::TheoryDefinition
+                | NodeType::Comment
+        )
+    }
+    fn try_from(code: u32) -> Result<NodeType, ClingoError> {
         // println!("in try_from");
         match code {
-            clingo_ast_type_e_clingo_ast_type_id => Ok(ASTType::Id),
-            clingo_ast_type_e_clingo_ast_type_variable => Ok(ASTType::Variable),
-            clingo_ast_type_e_clingo_ast_type_symbolic_term => Ok(ASTType::SymbolicTerm),
-            clingo_ast_type_e_clingo_ast_type_unary_operation => Ok(ASTType::UnaryOperation),
-            clingo_ast_type_e_clingo_ast_type_binary_operation => Ok(ASTType::BinaryOperation),
-            clingo_ast_type_e_clingo_ast_type_interval => Ok(ASTType::Interval),
-            clingo_ast_type_e_clingo_ast_type_function => Ok(ASTType::Function),
-            clingo_ast_type_e_clingo_ast_type_pool => Ok(ASTType::Pool),
-            clingo_ast_type_e_clingo_ast_type_boolean_constant => Ok(ASTType::BooleanConstant),
-            clingo_ast_type_e_clingo_ast_type_symbolic_atom => Ok(ASTType::SymbolicAtom),
-            clingo_ast_type_e_clingo_ast_type_comparison => Ok(ASTType::Comparison),
+            clingo_ast_type_e_clingo_ast_type_id => Ok(NodeType::Id),
+            clingo_ast_type_e_clingo_ast_type_variable => Ok(NodeType::Variable),
+            clingo_ast_type_e_clingo_ast_type_symbolic_term => Ok(NodeType::SymbolicTerm),
+            clingo_ast_type_e_clingo_ast_type_unary_operation => Ok(NodeType::UnaryOperation),
+            clingo_ast_type_e_clingo_ast_type_binary_operation => Ok(NodeType::BinaryOperation),
+            clingo_ast_type_e_clingo_ast_type_interval => Ok(NodeType::Interval),
+            clingo_ast_type_e_clingo_ast_type_function => Ok(NodeType::Function),
+            clingo_ast_type_e_clingo_ast_type_pool => Ok(NodeType::Pool),
+            clingo_ast_type_e_clingo_ast_type_boolean_constant => Ok(NodeType::BooleanConstant),
+            clingo_ast_type_e_clingo_ast_type_symbolic_atom => Ok(NodeType::SymbolicAtom),
+            clingo_ast_type_e_clingo_ast_type_comparison => Ok(NodeType::Comparison),
+            clingo_ast_type_e_clingo_ast_type_guard => Ok(NodeType::Guard),
             clingo_ast_type_e_clingo_ast_type_conditional_literal => {
-                Ok(ASTType::ConditionalLiteral)
+                Ok(NodeType::ConditionalLiteral)
             }
-            clingo_ast_type_e_clingo_ast_type_aggregate => Ok(ASTType::Aggregate),
+            clingo_ast_type_e_clingo_ast_type_aggregate => Ok(NodeType::Aggregate),
             clingo_ast_type_e_clingo_ast_type_body_aggregate_element => {
-                Ok(ASTType::BodyAggregateElement)
+                Ok(NodeType::BodyAggregateElement)
             }
-            clingo_ast_type_e_clingo_ast_type_body_aggregate => Ok(ASTType::BodyAggregate),
+            clingo_ast_type_e_clingo_ast_type_body_aggregate => Ok(NodeType::BodyAggregate),
             clingo_ast_type_e_clingo_ast_type_head_aggregate_element => {
-                Ok(ASTType::HeadAggregateElement)
+                Ok(NodeType::HeadAggregateElement)
             }
-            clingo_ast_type_e_clingo_ast_type_head_aggregate => Ok(ASTType::HeadAggregate),
-            clingo_ast_type_e_clingo_ast_type_disjunction => Ok(ASTType::Disjunction),
-            clingo_ast_type_e_clingo_ast_type_theory_sequence => Ok(ASTType::TheorySequence),
-            clingo_ast_type_e_clingo_ast_type_theory_function => Ok(ASTType::TheoryFunction),
+            clingo_ast_type_e_clingo_ast_type_head_aggregate => Ok(NodeType::HeadAggregate),
+            clingo_ast_type_e_clingo_ast_type_disjunction => Ok(NodeType::Disjunction),
+            clingo_ast_type_e_clingo_ast_type_theory_sequence => Ok(NodeType::TheorySequence),
+            clingo_ast_type_e_clingo_ast_type_theory_function => Ok(NodeType::TheoryFunction),
             clingo_ast_type_e_clingo_ast_type_theory_unparsed_term_element => {
-                Ok(ASTType::TheoryUnparsedTermElement)
+                Ok(NodeType::TheoryUnparsedTermElement)
             }
             clingo_ast_type_e_clingo_ast_type_theory_unparsed_term => {
-                Ok(ASTType::TheoryUnparsedTerm)
+                Ok(NodeType::TheoryUnparsedTerm)
             }
-            clingo_ast_type_e_clingo_ast_type_theory_guard => Ok(ASTType::TheoryGuard),
-            clingo_ast_type_e_clingo_ast_type_theory_atom_element => Ok(ASTType::TheoryAtomElement),
-            clingo_ast_type_e_clingo_ast_type_theory_atom => Ok(ASTType::TheoryAtom),
-            clingo_ast_type_e_clingo_ast_type_literal => Ok(ASTType::Literal),
+            clingo_ast_type_e_clingo_ast_type_theory_guard => Ok(NodeType::TheoryGuard),
+            clingo_ast_type_e_clingo_ast_type_theory_atom_element => Ok(NodeType::TheoryAtomElement),
+            clingo_ast_type_e_clingo_ast_type_theory_atom => Ok(NodeType::TheoryAtom),
+            clingo_ast_type_e_clingo_ast_type_literal => Ok(NodeType::Literal),
             clingo_ast_type_e_clingo_ast_type_theory_operator_definition => {
-                Ok(ASTType::TheoryOperatorDefinition)
+                Ok(NodeType::TheoryOperatorDefinition)
             }
             clingo_ast_type_e_clingo_ast_type_theory_term_definition => {
-                Ok(ASTType::TheoryTermDefinition)
+                Ok(NodeType::TheoryTermDefinition)
             }
             clingo_ast_type_e_clingo_ast_type_theory_guard_definition => {
-                Ok(ASTType::TheoryGuardDefinition)
+                Ok(NodeType::TheoryGuardDefinition)
             }
             clingo_ast_type_e_clingo_ast_type_theory_atom_definition => {
-                Ok(ASTType::TheoryAtomDefinition)
+                Ok(NodeType::TheoryAtomDefinition)
             }
-            clingo_ast_type_e_clingo_ast_type_rule => Ok(ASTType::Rule),
-            clingo_ast_type_e_clingo_ast_type_definition => Ok(ASTType::Definition),
-            clingo_ast_type_e_clingo_ast_type_show_signature => Ok(ASTType::ShowSignature),
-            clingo_ast_type_e_clingo_ast_type_show_term => Ok(ASTType::ShowTerm),
-            clingo_ast_type_e_clingo_ast_type_minimize => Ok(ASTType::Minimize),
-            clingo_ast_type_e_clingo_ast_type_script => Ok(ASTType::Script),
-            clingo_ast_type_e_clingo_ast_type_program => Ok(ASTType::Program),
-            clingo_ast_type_e_clingo_ast_type_external => Ok(ASTType::External),
-            clingo_ast_type_e_clingo_ast_type_edge => Ok(ASTType::Edge),
-            clingo_ast_type_e_clingo_ast_type_heuristic => Ok(ASTType::Heuristic),
-            clingo_ast_type_e_clingo_ast_type_project_atom => Ok(ASTType::ProjectAtom),
-            clingo_ast_type_e_clingo_ast_type_project_signature => Ok(ASTType::ProjectSignature),
-            clingo_ast_type_e_clingo_ast_type_defined => Ok(ASTType::Defined),
-            clingo_ast_type_e_clingo_ast_type_theory_definition => Ok(ASTType::TheoryDefinition),
-            clingo_ast_type_e_clingo_ast_type_comment => Ok(ASTType::Comment),
+            clingo_ast_type_e_clingo_ast_type_rule => Ok(NodeType::Rule),
+            clingo_ast_type_e_clingo_ast_type_definition => Ok(NodeType::Definition),
+            clingo_ast_type_e_clingo_ast_type_show_signature => Ok(NodeType::ShowSignature),
+            clingo_ast_type_e_clingo_ast_type_show_term => Ok(NodeType::ShowTerm),
+            clingo_ast_type_e_clingo_ast_type_minimize => Ok(NodeType::Minimize),
+            clingo_ast_type_e_clingo_ast_type_script => Ok(NodeType::Script),
+            clingo_ast_type_e_clingo_ast_type_program => Ok(NodeType::Program),
+            clingo_ast_type_e_clingo_ast_type_external => Ok(NodeType::External),
+            clingo_ast_type_e_clingo_ast_type_edge => Ok(NodeType::Edge),
+            clingo_ast_type_e_clingo_ast_type_heuristic => Ok(NodeType::Heuristic),
+            clingo_ast_type_e_clingo_ast_type_project_atom => Ok(NodeType::ProjectAtom),
+            clingo_ast_type_e_clingo_ast_type_project_signature => Ok(NodeType::ProjectSignature),
+            clingo_ast_type_e_clingo_ast_type_defined => Ok(NodeType::Defined),
+            clingo_ast_type_e_clingo_ast_type_theory_definition => Ok(NodeType::TheoryDefinition),
+            clingo_ast_type_e_clingo_ast_type_comment => Ok(NodeType::Comment),
             x => {
                 eprintln!(
                     "FFIError in {} {}, {} : Failed to match clingo_ast_type {}",
@@ -202,9 +226,9 @@ impl ASTType {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
 /// Enumeration of attributes types used by the AST.
-pub enum ASTAttributeType {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum AttributeType {
     /// For an attribute of type `int`.
     Number = clingo_ast_attribute_type_e_clingo_ast_attribute_type_number as isize,
     /// For an attribute of type `clingo_ast_symbol_t`.
@@ -216,40 +240,40 @@ pub enum ASTAttributeType {
     /// For an attribute of type `clingo_ast_t *`.
     Ast = clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast as isize,
     /// For an attribute of type `clingo_ast_t *` that can be NULL.
-    OptionalAST = clingo_ast_attribute_type_e_clingo_ast_attribute_type_optional_ast as isize,
+    OptionalAst = clingo_ast_attribute_type_e_clingo_ast_attribute_type_optional_ast as isize,
     /// For an attribute of type `char const **`.
     StringArray = clingo_ast_attribute_type_e_clingo_ast_attribute_type_string_array as isize,
     /// For an attribute of type `clingo_ast_t **`.
-    ASTArray = clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast_array as isize,
+    AstArray = clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast_array as isize,
 }
 
 use std::convert::TryFrom;
-impl TryFrom<u32> for ASTAttributeType {
+impl TryFrom<u32> for AttributeType {
     type Error = ClingoError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_number => {
-                Ok(ASTAttributeType::Number)
+                Ok(AttributeType::Number)
             }
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_symbol => {
-                Ok(ASTAttributeType::Symbol)
+                Ok(AttributeType::Symbol)
             }
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_location => {
-                Ok(ASTAttributeType::Location)
+                Ok(AttributeType::Location)
             }
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_string => {
-                Ok(ASTAttributeType::String)
+                Ok(AttributeType::String)
             }
-            clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast => Ok(ASTAttributeType::Ast),
+            clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast => Ok(AttributeType::Ast),
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_optional_ast => {
-                Ok(ASTAttributeType::OptionalAST)
+                Ok(AttributeType::OptionalAst)
             }
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_string_array => {
-                Ok(ASTAttributeType::StringArray)
+                Ok(AttributeType::StringArray)
             }
             clingo_ast_attribute_type_e_clingo_ast_attribute_type_ast_array => {
-                Ok(ASTAttributeType::ASTArray)
+                Ok(AttributeType::AstArray)
             }
             x => {
                 eprintln!(
@@ -266,9 +290,9 @@ impl TryFrom<u32> for ASTAttributeType {
         }
     }
 }
-#[derive(Debug, Copy, Clone)]
 /// Enumeration of attributes used by the AST.
-enum ASTAttribute {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Attribute {
     Argument = clingo_ast_attribute_e_clingo_ast_attribute_argument as isize,
     Arguments = clingo_ast_attribute_e_clingo_ast_attribute_arguments as isize,
     Arity = clingo_ast_attribute_e_clingo_ast_attribute_arity as isize,
@@ -350,35 +374,46 @@ impl<'a> Ast<'a> {
         })
     }
     pub(crate) fn head(&self) -> Head<'_> {
-        let ast = self.get_attribute_ast(ASTAttribute::Head).unwrap();
+        let ast = self.get_attribute_ast(Attribute::Head).unwrap();
         Head { ast }
     }
     pub(crate) fn term(&self) -> Term<'_> {
-        let ast = self.get_attribute_ast(ASTAttribute::Term).unwrap();
+        let ast = self.get_attribute_ast(Attribute::Term).unwrap();
         Term { ast }
     }
     pub(crate) fn set_term(&mut self, term: Term) {
-        let term = term.ast;
-        // TODO: check
-        self.set_attribute_ast(ASTAttribute::Term, term).unwrap();
+        self.set_attribute_ast(Attribute::Term, &term.ast).unwrap();
     }
     pub(crate) fn guard(&self) -> TheoryGuard<'_> {
         // TODO: check
-        let ast = self.get_attribute_ast(ASTAttribute::Guard).unwrap();
+        let ast = self.get_attribute_ast(Attribute::Guard).unwrap();
         TheoryGuard { ast }
     }
     pub(crate) fn elements(&self) -> &[TheoryAtomElement<'_>] {
         unimplemented!()
-        // let ast = self.get_attribute_ast(ASTAttribute::Elements).unwrap();
+        // let ast = self.get_attribute_ast(Attribute::Elements).unwrap();
         // &[]
     }
     pub(crate) fn left(&self) -> Term<'a> {
-        let ast = self.get_attribute_ast(ASTAttribute::Left).unwrap();
+        let ast = self.get_attribute_ast(Attribute::Left).unwrap();
         Term { ast }
     }
     pub(crate) fn right(&self) -> Term<'a> {
-        let ast = self.get_attribute_ast(ASTAttribute::Right).unwrap();
+        let ast = self.get_attribute_ast(Attribute::Right).unwrap();
         Term { ast }
+    }
+
+    /// Wrap an AST node whose reference is owned by the caller.
+    pub(crate) fn from_ptr(ast: *mut clingo_ast_t) -> Result<Ast<'a>, ClingoError> {
+        match NonNull::new(ast) {
+            Some(ptr) => Ok(Ast {
+                ptr,
+                _lifetime: PhantomData,
+            }),
+            None => Err(ClingoError::FFIError {
+                msg: "Tried creating NonNull from a null pointer.",
+            }),
+        }
     }
 
     /// Increment the reference count of an AST node.
@@ -399,23 +434,14 @@ impl<'a> Ast<'a> {
     /// Create a shallow copy of an AST node.
     /// might set one of the following error codes:
     /// - ::clingo_error_bad_alloc
-    fn copy(&self) -> Result<Ast<'_>, ClingoError> {
+    pub(crate) fn copy(&self) -> Result<Ast<'a>, ClingoError> {
         let mut cpy = std::ptr::null_mut();
         if !unsafe { clingo_ast_copy(self.ptr.as_ptr(), &mut cpy) } {
-            eprintln!("Call to clingo_ast_copy() failed");
             return Err(ClingoError::new_internal(
                 "Call to clingo_ast_copy() failed.",
             ));
         }
-        match NonNull::new(cpy) {
-            Some(cpy) => Ok(Ast {
-                ptr: cpy,
-                _lifetime: PhantomData,
-            }),
-            None => Err(ClingoError::FFIError {
-                msg: "Tried creating NonNull from a null pointer.",
-            })?,
-        }
+        Ast::from_ptr(cpy)
     }
     /// Create a deep copy of an AST node.
     /// might set one of the following error codes:
@@ -438,39 +464,7 @@ impl<'a> Ast<'a> {
             })?,
         }
     }
-    // extern "C" {
-    //     #[doc = "! Less than compare two AST nodes."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] a the left-hand-side AST"]
-    //     #[doc = "! @param[in] b the right-hand-side AST"]
-    //     #[doc = "! @return the result of the comparison"]
-    //     pub fn clingo_ast_less_than(a: *mut clingo_ast_t, b: *mut clingo_ast_t) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Equality compare two AST nodes."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] a the left-hand-side AST"]
-    //     #[doc = "! @param[in] b the right-hand-side AST"]
-    //     #[doc = "! @return the result of the comparison"]
-    //     pub fn clingo_ast_equal(a: *mut clingo_ast_t, b: *mut clingo_ast_t) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Compute a hash for an AST node."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @return the resulting hash code"]
-    //     pub fn clingo_ast_hash(ast: *mut clingo_ast_t) -> usize;
-    // }
 
-    // extern "C" {
-    //     #[doc = "! Get the size of the string representation of an AST node."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[out] size the size of the string representation"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_to_string_size(ast: *mut clingo_ast_t, size: *mut usize) -> bool;
-    // }
     /// Get the string representation of an AST node.
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
@@ -504,36 +498,37 @@ impl<'a> Ast<'a> {
     /// Get the type of an AST node.
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    pub(crate) fn get_type(&self) -> Result<ASTType, ClingoError> {
+    pub(crate) fn get_type(&self) -> Result<NodeType, ClingoError> {
         let mut ast_type = 0;
         if !unsafe { clingo_ast_get_type(self.ptr.as_ptr(), &mut ast_type) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_ast_get_type() failed.",
             ));
         }
-        ASTType::try_from(ast_type as u32)
+        NodeType::try_from(ast_type as u32)
     }
 
-    // extern "C" {
-    //     #[doc = "! Check if an AST has the given attribute."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the attribute to check"]
-    //     #[doc = "! @param[out] has_attribute the result"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_has_attribute(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         has_attribute: *mut bool,
-    //     ) -> bool;
-    // }
-
-    /// Get the type of the given AST node.
+    /// Check if an AST node has the given attribute.
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn get_attribute_type(&self, attribute: ASTAttribute) -> Result<ASTAttributeType, ClingoError> {
+    pub(crate) fn has_attribute(&self, attribute: Attribute) -> Result<bool, ClingoError> {
+        let mut has_attribute = false;
+        if !unsafe {
+            clingo_ast_has_attribute(self.ptr.as_ptr(), attribute as i32, &mut has_attribute)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_has_attribute() failed.",
+            ));
+        }
+        Ok(has_attribute)
+    }
+
+    /// Get the type of the given attribute of an AST node.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_type(&self, attribute: Attribute) -> Result<AttributeType, ClingoError> {
         let mut attribute_type = 0;
         if !unsafe {
             clingo_ast_attribute_type(self.ptr.as_ptr(), attribute as i32, &mut attribute_type)
@@ -542,43 +537,14 @@ impl<'a> Ast<'a> {
                 "Call to clingo_ast_attribute_type() failed.",
             ));
         }
-        ASTAttributeType::try_from(attribute_type as u32)
+        AttributeType::try_from(attribute_type as u32)
     }
 
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_number\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_number(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *mut ::std::os::raw::c_int,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_number\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_set_number(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: ::std::os::raw::c_int,
-    //     ) -> bool;
-    // }
-
-    /// Get the value of an attribute of type ASTAttributeType::Number
+    /// Get the value of an attribute of type AttributeType::Number
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn get_attribute_number(&self, attribute: ASTAttribute) -> Result<i32, ClingoError> {
+    pub(crate) fn get_attribute_number(&self, attribute: Attribute) -> Result<i32, ClingoError> {
         let mut value = 0;
         if !unsafe {
             clingo_ast_attribute_get_number(self.ptr.as_ptr(), attribute as i32, &mut value)
@@ -590,11 +556,32 @@ impl<'a> Ast<'a> {
         Ok(value)
     }
 
-    /// Get the value of an attribute of type ASTAttributeType::String
+    /// Set the value of an attribute of type AttributeType::Number
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn get_attribute_string(&self, attribute: ASTAttribute) -> Result<&'static str, ClingoError> {
+    pub(crate) fn set_attribute_number(
+        &self,
+        attribute: Attribute,
+        value: i32,
+    ) -> Result<(), ClingoError> {
+        if !unsafe { clingo_ast_attribute_set_number(self.ptr.as_ptr(), attribute as i32, value) }
+        {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_number() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Get the value of an attribute of type AttributeType::String
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_string(
+        &self,
+        attribute: Attribute,
+    ) -> Result<&'static str, ClingoError> {
         let mut value = std::ptr::null();
         if !unsafe {
             clingo_ast_attribute_get_string(self.ptr.as_ptr(), attribute as i32, &mut value)
@@ -608,19 +595,18 @@ impl<'a> Ast<'a> {
     }
 
     pub(crate) fn value(&self) -> Result<&'static str, ClingoError> {
-        self.get_attribute_string(ASTAttribute::Value)
+        self.get_attribute_string(Attribute::Value)
     }
     pub(crate) fn comment_type(&self) -> Result<i32, ClingoError> {
-        self.get_attribute_number(ASTAttribute::CommentType)
+        self.get_attribute_number(Attribute::CommentType)
     }
 
-    /// Get the value of an attribute of type ASTAttributeType::Symbol
+    /// Get the value of an attribute of type AttributeType::Symbol
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn symbol(&self) -> Result<Symbol, ClingoError> {
+    pub(crate) fn get_attribute_symbol(&self, attribute: Attribute) -> Result<Symbol, ClingoError> {
         let mut sym = 0;
-        let attribute = ASTAttribute::Symbol;
         if !unsafe {
             clingo_ast_attribute_get_symbol(self.ptr.as_ptr(), attribute as i32, &mut sym)
         } {
@@ -630,28 +616,39 @@ impl<'a> Ast<'a> {
         }
         Ok(Symbol(sym))
     }
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_symbol\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_set_symbol(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: clingo_symbol_t,
-    //     ) -> bool;
-    // }
 
-    /// Get the value of an attribute of type \"clingo_ast_attribute_type_location\".
+    /// Set the value of an attribute of type AttributeType::Symbol
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
+    pub(crate) fn set_attribute_symbol(
+        &self,
+        attribute: Attribute,
+        value: Symbol,
+    ) -> Result<(), ClingoError> {
+        if !unsafe {
+            clingo_ast_attribute_set_symbol(self.ptr.as_ptr(), attribute as i32, value.0)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_symbol() failed.",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn location(&self) -> Result<Location, ClingoError> {
+        self.get_attribute_location(Attribute::Location)
+    }
+
+    /// Get the value of an attribute of type AttributeType::Location
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_location(
+        &self,
+        attribute: Attribute,
+    ) -> Result<Location, ClingoError> {
         let mut loc: clingo_location = Location::default().0;
-        let attribute = ASTAttribute::Location;
         if !unsafe {
             clingo_ast_attribute_get_location(self.ptr.as_ptr(), attribute as i32, &mut loc)
         } {
@@ -662,114 +659,71 @@ impl<'a> Ast<'a> {
         Ok(Location(loc))
     }
 
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_location\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_set_location(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *const clingo_location_t,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_string\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_string(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *mut *const ::std::os::raw::c_char,
-    //     ) -> bool;
-    // }
-    pub(crate) fn name(&self) -> Result<String, ClingoError> {
-        let attribute = ASTAttribute::Name;
-        let ast_attribute_type = self.get_attribute_type(attribute).unwrap();
-        dbg!(ast_attribute_type);
-        self.to_string()
-        // TODO
-        // let c_str = std::ptr::null_mut();
-        // if !unsafe { clingo_ast_attribute_get_string(self.ptr.as_ptr(), attribute as i32, c_str) } {
-        //     return Err(ClingoError::new_internal(
-        //         "Call to clingo_ast_attribute_get_string() failed.",
-        //     ));
-        // }
-
-        // let c_str: &CStr = unsafe { CStr::from_ptr(*c_str) };
-        // let str_slice: &str = match c_str.to_str() {
-        //     Ok(slice) => slice,
-        //     Err(e) => {
-        //         eprintln!("{:?}", e);
-        //         return Err(ClingoError::new_internal("Call to c_str.to_str() failed."));
-        //     }
-        // };
-        // Ok(str_slice.to_string())
-    }
-
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_string\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_set_string(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *const ::std::os::raw::c_char,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_ast\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_ast(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *mut *mut clingo_ast_t,
-    //     ) -> bool;
-    // }
-
-    /// Get the value of an attribute of type ASTAttributeType
+    /// Set the value of an attribute of type AttributeType::Location
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn get_attribute_ast(&self, attribute: ASTAttribute) -> Result<Ast<'a>, ClingoError> {
+    pub(crate) fn set_attribute_location(
+        &self,
+        attribute: Attribute,
+        value: &Location,
+    ) -> Result<(), ClingoError> {
+        if !unsafe {
+            clingo_ast_attribute_set_location(self.ptr.as_ptr(), attribute as i32, &value.0)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_location() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Set the value of an attribute of type AttributeType::String
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn set_attribute_string(
+        &self,
+        attribute: Attribute,
+        value: &str,
+    ) -> Result<(), ClingoError> {
+        let value = CString::new(value)?;
+        if !unsafe {
+            clingo_ast_attribute_set_string(self.ptr.as_ptr(), attribute as i32, value.as_ptr())
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_string() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn name(&self) -> Result<String, ClingoError> {
+        let attribute = Attribute::Name;
+        let ast_attribute_type = self.get_attribute_type(attribute).unwrap();
+        dbg!(ast_attribute_type);
+        self.to_string()
+    }
+
+    /// Get the value of an attribute of type AttributeType::Ast
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_ast(&self, attribute: Attribute) -> Result<Ast<'a>, ClingoError> {
         let mut ast = std::ptr::null_mut();
         if !unsafe { clingo_ast_attribute_get_ast(self.ptr.as_ptr(), attribute as i32, &mut ast) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_ast_attribute_get_ast() failed.",
             ));
         }
-        match NonNull::new(ast) {
-            Some(x) => Ok(Ast {
-                ptr: x,
-                _lifetime: PhantomData,
-            }),
-            None => Err(ClingoError::FFIError {
-                msg: "Tried creating NonNull from a null pointer.",
-            })?,
-        }
+        Ast::from_ptr(ast)
     }
 
-    /// Set the value of an attribute of type \"clingo_ast_attribute_type_ast\".
+    /// Set the value of an attribute of type AttributeType::Ast
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    fn set_attribute_ast(&self, attribute: ASTAttribute, value: Ast) -> Result<(), ClingoError> {
+    pub(crate) fn set_attribute_ast(&self, attribute: Attribute, value: &Ast) -> Result<(), ClingoError> {
         if !unsafe {
             clingo_ast_attribute_set_ast(self.ptr.as_ptr(), attribute as i32, value.ptr.as_ptr())
         } {
@@ -780,142 +734,200 @@ impl<'a> Ast<'a> {
         Ok(())
     }
 
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_optional_ast\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @note The value might be \"NULL\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_optional_ast(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *mut *mut clingo_ast_t,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_optional_ast\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @note The value might be \"NULL\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_set_optional_ast(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         value: *mut clingo_ast_t,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_string_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_string_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //         value: *mut *const ::std::os::raw::c_char,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_string_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     #[doc = "! - ::clingo_error_bad_alloc"]
-    //     pub fn clingo_ast_attribute_set_string_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //         value: *const ::std::os::raw::c_char,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Remove an element from an attribute of type \"clingo_ast_attribute_type_string_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_delete_string_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the size of an attribute of type \"clingo_ast_attribute_type_string_array\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] size the resulting size"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_size_string_array(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         size: *mut usize,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Insert a value into an attribute of type \"clingo_ast_attribute_type_string_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     #[doc = "! - ::clingo_error_bad_alloc"]
-    //     pub fn clingo_ast_attribute_insert_string_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //         value: *const ::std::os::raw::c_char,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the value of an attribute of type \"clingo_ast_attribute_type_ast_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @param[out] value the resulting value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_get_ast_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //         value: *mut *mut clingo_ast_t,
-    //     ) -> bool;
-    // }
-
-    /// Get the value of an attribute of type ASTAttributeType::ASTArray at the given index.
+    /// Get the value of an attribute of type AttributeType::OptionalAst
     ///
-    /// ; might set one of the following error codes:
-    ///  - ::clingo_error_runtime
-    fn get_attribute_ast_at(
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_optional_ast(
         &self,
-        attribute: ASTAttribute,
+        attribute: Attribute,
+    ) -> Result<Option<Ast<'a>>, ClingoError> {
+        let mut ast = std::ptr::null_mut();
+        if !unsafe {
+            clingo_ast_attribute_get_optional_ast(self.ptr.as_ptr(), attribute as i32, &mut ast)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_get_optional_ast() failed.",
+            ));
+        }
+        if ast.is_null() {
+            return Ok(None);
+        }
+        Ast::from_ptr(ast).map(Some)
+    }
+
+    /// Set the value of an attribute of type AttributeType::OptionalAst
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn set_attribute_optional_ast(
+        &self,
+        attribute: Attribute,
+        value: Option<&Ast>,
+    ) -> Result<(), ClingoError> {
+        let value = match value {
+            Some(ast) => ast.ptr.as_ptr(),
+            None => std::ptr::null_mut(),
+        };
+        if !unsafe {
+            clingo_ast_attribute_set_optional_ast(self.ptr.as_ptr(), attribute as i32, value)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_optional_ast() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Get the size of an attribute of type AttributeType::StringArray
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn size_attribute_string_array(
+        &self,
+        attribute: Attribute,
+    ) -> Result<usize, ClingoError> {
+        let mut size = 0;
+        if !unsafe {
+            clingo_ast_attribute_size_string_array(self.ptr.as_ptr(), attribute as i32, &mut size)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_size_string_array() failed.",
+            ));
+        }
+        Ok(size)
+    }
+
+    /// Get the value of an attribute of type AttributeType::StringArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_string_at(
+        &self,
+        attribute: Attribute,
         index: usize,
-    ) -> Result<Ast<'_>, ClingoError> {
+    ) -> Result<&'static str, ClingoError> {
+        let mut value = std::ptr::null();
+        if !unsafe {
+            clingo_ast_attribute_get_string_at(
+                self.ptr.as_ptr(),
+                attribute as i32,
+                index,
+                &mut value,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_get_string_at() failed.",
+            ));
+        }
+        // strings in the AST are internalized and valid for the duration of the process
+        Ok(unsafe { CStr::from_ptr(value) }.to_str()?)
+    }
+
+    /// Set the value of an attribute of type AttributeType::StringArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    /// - ::clingo_error_bad_alloc
+    pub(crate) fn set_attribute_string_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+        value: &str,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_string_array(attribute)?)?;
+        let value = CString::new(value)?;
+        if !unsafe {
+            clingo_ast_attribute_set_string_at(
+                self.ptr.as_ptr(),
+                attribute as i32,
+                index,
+                value.as_ptr(),
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_string_at() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Insert a value into an attribute of type AttributeType::StringArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    /// - ::clingo_error_bad_alloc
+    pub(crate) fn insert_attribute_string_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+        value: &str,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_string_array(attribute)? + 1)?;
+        let value = CString::new(value)?;
+        if !unsafe {
+            clingo_ast_attribute_insert_string_at(
+                self.ptr.as_ptr(),
+                attribute as i32,
+                index,
+                value.as_ptr(),
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_insert_string_at() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Remove an element from an attribute of type AttributeType::StringArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn delete_attribute_string_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_string_array(attribute)?)?;
+        if !unsafe {
+            clingo_ast_attribute_delete_string_at(self.ptr.as_ptr(), attribute as i32, index)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_delete_string_at() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Get the size of an attribute of type AttributeType::AstArray
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn size_attribute_ast_array(&self, attribute: Attribute) -> Result<usize, ClingoError> {
+        let mut size = 0;
+        if !unsafe {
+            clingo_ast_attribute_size_ast_array(self.ptr.as_ptr(), attribute as i32, &mut size)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_size_ast_array() failed.",
+            ));
+        }
+        Ok(size)
+    }
+
+    /// Get the value of an attribute of type AttributeType::AstArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn get_attribute_ast_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+    ) -> Result<Ast<'a>, ClingoError> {
         let mut ast = std::ptr::null_mut();
         if !unsafe {
             clingo_ast_attribute_get_ast_at(self.ptr.as_ptr(), attribute as i32, index, &mut ast)
@@ -924,117 +936,99 @@ impl<'a> Ast<'a> {
                 "Call to clingo_ast_attribute_get_ast_at() failed.",
             ));
         }
-        match NonNull::new(ast) {
-            Some(x) => Ok(Ast {
-                ptr: x,
-                _lifetime: PhantomData,
-            }),
-            None => Err(ClingoError::FFIError {
-                msg: "Tried creating NonNull from a null pointer.",
-            })?,
-        }
+        Ast::from_ptr(ast)
     }
 
-    // extern "C" {
-    //     #[doc = "! Set the value of an attribute of type \"clingo_ast_attribute_type_ast_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @param[in] value the value"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     #[doc = "! - ::clingo_error_bad_alloc"]
-    //     pub fn clingo_ast_attribute_set_ast_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //         value: *mut clingo_ast_t,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Remove an element from an attribute of type \"clingo_ast_attribute_type_ast_array\" at the given index."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[in] index the target index"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_delete_ast_at(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         index: usize,
-    //     ) -> bool;
-    // }
-    // extern "C" {
-    //     #[doc = "! Get the size of an attribute of type \"clingo_ast_attribute_type_ast_array\"."]
-    //     #[doc = "!"]
-    //     #[doc = "! @param[in] ast the target AST"]
-    //     #[doc = "! @param[in] attribute the target attribute"]
-    //     #[doc = "! @param[out] size the resulting size"]
-    //     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-    //     #[doc = "! - ::clingo_error_runtime"]
-    //     pub fn clingo_ast_attribute_size_ast_array(
-    //         ast: *mut clingo_ast_t,
-    //         attribute: clingo_ast_attribute_t,
-    //         size: *mut usize,
-    //     ) -> bool;
-    // }
-    // fn ast_array(&self, attribute: ASTAttribute) -> ASTArray {
-    //     ASTArray {
-    //         ast: &self,
-    //         attribute,
-    //     }
-    // }
+    /// Set the value of an attribute of type AttributeType::AstArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    /// - ::clingo_error_bad_alloc
+    pub(crate) fn set_attribute_ast_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+        value: &Ast,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_ast_array(attribute)?)?;
+        if !unsafe {
+            clingo_ast_attribute_set_ast_at(
+                self.ptr.as_ptr(),
+                attribute as i32,
+                index,
+                value.ptr.as_ptr(),
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_set_ast_at() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Insert a value into an attribute of type AttributeType::AstArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    /// - ::clingo_error_bad_alloc
+    pub(crate) fn insert_attribute_ast_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+        value: &Ast,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_ast_array(attribute)? + 1)?;
+        if !unsafe {
+            clingo_ast_attribute_insert_ast_at(
+                self.ptr.as_ptr(),
+                attribute as i32,
+                index,
+                value.ptr.as_ptr(),
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_insert_ast_at() failed.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Remove an element from an attribute of type AttributeType::AstArray at the given index.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_runtime
+    pub(crate) fn delete_attribute_ast_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+    ) -> Result<(), ClingoError> {
+        // clingo does not check the index
+        check_index(index, self.size_attribute_ast_array(attribute)?)?;
+        if !unsafe {
+            clingo_ast_attribute_delete_ast_at(self.ptr.as_ptr(), attribute as i32, index)
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_attribute_delete_ast_at() failed.",
+            ));
+        }
+        Ok(())
+    }
 }
-// extern "C" {
-//     #[doc = "! Insert a value into an attribute of type \"clingo_ast_attribute_type_ast_array\" at the given index."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] ast the target AST"]
-//     #[doc = "! @param[in] attribute the target attribute"]
-//     #[doc = "! @param[in] index the target index"]
-//     #[doc = "! @param[in] value the value"]
-//     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-//     #[doc = "! - ::clingo_error_runtime"]
-//     #[doc = "! - ::clingo_error_bad_alloc"]
-//     pub fn clingo_ast_attribute_insert_ast_at(
-//         ast: *mut clingo_ast_t,
-//         attribute: clingo_ast_attribute_t,
-//         index: usize,
-//         value: *mut clingo_ast_t,
-//     ) -> bool;
-// }
 
-// extern "C" {
-//     #[doc = "! Parse the programs in the given list of files and return an abstract syntax tree for each statement via a callback."]
-//     #[doc = "!"]
-//     #[doc = "! The function follows clingo's handling of files on the command line."]
-//     #[doc = "! Filename \"-\" is treated as \"STDIN\" and if an empty list is given, then the parser will read from \"STDIN\"."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] files the beginning of the file name array"]
-//     #[doc = "! @param[in] size the number of file names"]
-//     #[doc = "! @param[in] callback the callback reporting statements"]
-//     #[doc = "! @param[in] callback_data user data for the callback"]
-//     #[doc = "! @param[in] logger callback to report messages during parsing"]
-//     #[doc = "! @param[in] logger_data user data for the logger"]
-//     #[doc = "! @param[in] message_limit the maximum number of times the logger is called"]
-//     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-//     #[doc = "! - ::clingo_error_runtime if parsing fails"]
-//     #[doc = "! - ::clingo_error_bad_alloc"]
-//     pub fn clingo_ast_parse_files(
-//         files: *const *const ::std::os::raw::c_char,
-//         size: usize,
-//         callback: clingo_ast_callback_v2_t,
-//         callback_data: *mut ::std::os::raw::c_void,
-//         logger: clingo_logger_t,
-//         logger_data: *mut ::std::os::raw::c_void,
-//         message_limit: ::std::os::raw::c_uint,
-//     ) -> bool;
-// }
+/// Report an index that is out of range like clingo does for the attribute getters.
+fn check_index(index: usize, size: usize) -> Result<(), ClingoError> {
+    if index < size {
+        return Ok(());
+    }
+    set_internal_error(ErrorType::Runtime, "index out of range");
+    Err(ClingoError::new_internal("AST attribute index out of range."))
+}
 
-#[derive(Debug, Copy, Clone)]
 /// Enum to configure unpooling.
-pub(crate) enum Unpooling {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum UnpoolType {
     /// To only unpool conditions of conditional literals.
     Condition = clingo_ast_unpool_type_e_clingo_ast_unpool_type_condition as isize,
     /// To unpool everything except conditions of conditional literals.
@@ -1043,20 +1037,3 @@ pub(crate) enum Unpooling {
     All = clingo_ast_unpool_type_e_clingo_ast_unpool_type_all as isize,
 }
 
-// TODO
-// extern "C" {
-//     #[doc = "! Unpool the given AST."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] ast the target AST"]
-//     #[doc = "! @param[in] unpool_type what to unpool"]
-//     #[doc = "! @param[in] callback the callback to report ASTs"]
-//     #[doc = "! @param[in] callback_data user data for the callback"]
-//     #[doc = "! @return whether the call was successful; might set one of the following error codes:"]
-//     #[doc = "! - ::clingo_error_bad_alloc"]
-//     pub fn clingo_ast_unpool(
-//         ast: *mut clingo_ast_t,
-//         unpool_type: clingo_ast_unpool_type_bitset_t,
-//         callback: clingo_ast_callback_v2_t,
-//         callback_data: *mut ::std::os::raw::c_void,
-//     ) -> bool;
-// }

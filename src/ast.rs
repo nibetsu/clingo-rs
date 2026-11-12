@@ -4,7 +4,8 @@ use crate::{
 };
 
 use crate::ast_internals::Body;
-use crate::ast_internals::{ASTType, Ast};
+pub use crate::ast_internals::{Attribute, AttributeType, NodeType};
+use crate::ast_internals::Ast;
 use clingo_sys::*;
 use std::ffi::CStr;
 use std::str::Utf8Error;
@@ -261,26 +262,12 @@ unsafe extern "C" fn unsafe_ast_callback<T: StatementHandler>(
     };
     ast.acquire();
     let stm = match ast.get_type() {
-        Ok(ASTType::Rule) => Statement { ast },
-        Ok(ASTType::Definition) => Statement { ast },
-        Ok(ASTType::ShowSignature) => Statement { ast },
-        Ok(ASTType::Defined) => Statement { ast },
-        Ok(ASTType::ShowTerm) => Statement { ast },
-        Ok(ASTType::Minimize) => Statement { ast },
-        Ok(ASTType::Script) => Statement { ast },
-        Ok(ASTType::Program) => Statement { ast },
-        Ok(ASTType::External) => Statement { ast },
-        Ok(ASTType::Edge) => Statement { ast },
-        Ok(ASTType::Heuristic) => Statement { ast },
-        Ok(ASTType::ProjectAtom) => Statement { ast },
-        Ok(ASTType::ProjectSignature) => Statement { ast },
-        Ok(ASTType::TheoryDefinition) => Statement { ast },
-        Ok(ASTType::Comment) => Statement { ast },
+        Ok(node_type) if node_type.is_statement() => Statement { ast },
         _ => {
             // panicking here would abort the process, so report the error to clingo instead
             set_internal_error(
                 ErrorType::Runtime,
-                "unsafe_ast_callback() got an unexpected ASTType.",
+                "unsafe_ast_callback() got an unexpected NodeType.",
             );
             return false;
         }
@@ -435,18 +422,18 @@ pub struct Term<'a> {
 impl<'a> Term<'a> {
     pub fn is_a(self) -> Result<TermIsA<'a>, ClingoError> {
         match self.ast.get_type()? {
-            ASTType::Variable => Ok(TermIsA::Variable(Variable { ast: self.ast })),
-            ASTType::SymbolicTerm => Ok(TermIsA::SymbolicTerm(SymbolicTerm { ast: self.ast })),
-            ASTType::UnaryOperation => {
+            NodeType::Variable => Ok(TermIsA::Variable(Variable { ast: self.ast })),
+            NodeType::SymbolicTerm => Ok(TermIsA::SymbolicTerm(SymbolicTerm { ast: self.ast })),
+            NodeType::UnaryOperation => {
                 Ok(TermIsA::UnaryOperation(UnaryOperation { ast: self.ast }))
             }
-            ASTType::BinaryOperation => {
+            NodeType::BinaryOperation => {
                 Ok(TermIsA::BinaryOperation(BinaryOperation { ast: self.ast }))
             }
-            ASTType::Interval => Ok(TermIsA::Interval(Interval { ast: self.ast })),
-            ASTType::Function => Ok(TermIsA::Function(Function { ast: self.ast })),
-            ASTType::Pool => Ok(TermIsA::Pool(Pool { ast: self.ast })),
-            x => panic!("unexpected ASTType: {:?}", x),
+            NodeType::Interval => Ok(TermIsA::Interval(Interval { ast: self.ast })),
+            NodeType::Function => Ok(TermIsA::Function(Function { ast: self.ast })),
+            NodeType::Pool => Ok(TermIsA::Pool(Pool { ast: self.ast })),
+            x => panic!("unexpected NodeType: {:?}", x),
         }
     }
     pub fn to_string(&self) -> Result<String, ClingoError> {
@@ -508,8 +495,8 @@ pub struct Literal<'a> {
 impl<'a> Literal<'a> {
     pub fn is_a(self) -> Result<BasicLiteral<'a>, ClingoError> {
         match self.ast.get_type()? {
-            ASTType::Literal => Ok(BasicLiteral { ast: self.ast }),
-            x => panic!("unexpected ASTType: {:?}", x),
+            NodeType::Literal => Ok(BasicLiteral { ast: self.ast }),
+            x => panic!("unexpected NodeType: {:?}", x),
         }
     }
     pub fn to_string(&self) -> Result<String, ClingoError> {
@@ -624,12 +611,12 @@ impl<'a> From<TheoryAtom<'a>> for Head<'a> {
 impl<'a> Head<'a> {
     pub fn is_a(self) -> Result<HeadIsA<'a>, ClingoError> {
         match self.ast.get_type()? {
-            ASTType::Literal => Ok(HeadIsA::Literal(Literal { ast: self.ast })),
-            ASTType::HeadAggregate => Ok(HeadIsA::HeadAggregate(HeadAggregate { ast: self.ast })),
-            ASTType::Disjunction => Ok(HeadIsA::Disjunction(Disjunction { ast: self.ast })),
-            ASTType::TheoryAtom => Ok(HeadIsA::TheoryAtom(TheoryAtom { ast: self.ast })),
-            ASTType::Aggregate => Ok(HeadIsA::Aggregate(Aggregate { ast: self.ast })),
-            x => panic!("unexpected ASTType for Head: {:?}", x),
+            NodeType::Literal => Ok(HeadIsA::Literal(Literal { ast: self.ast })),
+            NodeType::HeadAggregate => Ok(HeadIsA::HeadAggregate(HeadAggregate { ast: self.ast })),
+            NodeType::Disjunction => Ok(HeadIsA::Disjunction(Disjunction { ast: self.ast })),
+            NodeType::TheoryAtom => Ok(HeadIsA::TheoryAtom(TheoryAtom { ast: self.ast })),
+            NodeType::Aggregate => Ok(HeadIsA::Aggregate(Aggregate { ast: self.ast })),
+            x => panic!("unexpected NodeType for Head: {:?}", x),
         }
     }
     pub fn to_string(&self) -> Result<String, ClingoError> {
@@ -682,14 +669,14 @@ pub enum BodyLiteralIsA<'a> {
 impl<'a> BodyLiteral<'a> {
     pub fn is_a(self) -> Result<BodyLiteralIsA<'a>, ClingoError> {
         match self.ast.get_type()? {
-            ASTType::Literal => Ok(BodyLiteralIsA::Literal(Literal { ast: self.ast })),
-            ASTType::ConditionalLiteral => {
+            NodeType::Literal => Ok(BodyLiteralIsA::Literal(Literal { ast: self.ast })),
+            NodeType::ConditionalLiteral => {
                 Ok(BodyLiteralIsA::ConditionalLiteral(ConditionalLiteral {
                     ast: self.ast,
                 }))
             }
-            ASTType::TheoryAtom => Ok(BodyLiteralIsA::TheoryAtom(TheoryAtom { ast: self.ast })),
-            x => panic!("unexpected ASTType for BodyLiteral: {:?}", x),
+            NodeType::TheoryAtom => Ok(BodyLiteralIsA::TheoryAtom(TheoryAtom { ast: self.ast })),
+            x => panic!("unexpected NodeType for BodyLiteral: {:?}", x),
         }
     }
     pub fn to_string(&self) -> Result<String, ClingoError> {
@@ -759,28 +746,28 @@ pub struct Statement<'a> {
 impl<'a> Statement<'a> {
     pub fn is_a(self) -> Result<StatementIsA<'a>, ClingoError> {
         match self.ast.get_type()? {
-            ASTType::Rule => Ok(StatementIsA::Rule(Rule { ast: self.ast })),
-            ASTType::Definition => Ok(StatementIsA::Definition(Definition { ast: self.ast })),
-            ASTType::ShowSignature => {
+            NodeType::Rule => Ok(StatementIsA::Rule(Rule { ast: self.ast })),
+            NodeType::Definition => Ok(StatementIsA::Definition(Definition { ast: self.ast })),
+            NodeType::ShowSignature => {
                 Ok(StatementIsA::ShowSignature(ShowSignature { ast: self.ast }))
             }
-            ASTType::Defined => Ok(StatementIsA::Defined(Defined { ast: self.ast })),
-            ASTType::ShowTerm => Ok(StatementIsA::ShowTerm(ShowTerm { ast: self.ast })),
-            ASTType::Minimize => Ok(StatementIsA::Minimize(Minimize { ast: self.ast })),
-            ASTType::Script => Ok(StatementIsA::Script(Script { ast: self.ast })),
-            ASTType::Program => Ok(StatementIsA::Program(Program { ast: self.ast })),
-            ASTType::External => Ok(StatementIsA::External(External { ast: self.ast })),
-            ASTType::Edge => Ok(StatementIsA::Edge(Edge { ast: self.ast })),
-            ASTType::Heuristic => Ok(StatementIsA::Heuristic(Heuristic { ast: self.ast })),
-            ASTType::ProjectAtom => Ok(StatementIsA::ProjectAtom(ProjectAtom { ast: self.ast })),
-            ASTType::ProjectSignature => Ok(StatementIsA::ProjectSignature(ProjectSignature {
+            NodeType::Defined => Ok(StatementIsA::Defined(Defined { ast: self.ast })),
+            NodeType::ShowTerm => Ok(StatementIsA::ShowTerm(ShowTerm { ast: self.ast })),
+            NodeType::Minimize => Ok(StatementIsA::Minimize(Minimize { ast: self.ast })),
+            NodeType::Script => Ok(StatementIsA::Script(Script { ast: self.ast })),
+            NodeType::Program => Ok(StatementIsA::Program(Program { ast: self.ast })),
+            NodeType::External => Ok(StatementIsA::External(External { ast: self.ast })),
+            NodeType::Edge => Ok(StatementIsA::Edge(Edge { ast: self.ast })),
+            NodeType::Heuristic => Ok(StatementIsA::Heuristic(Heuristic { ast: self.ast })),
+            NodeType::ProjectAtom => Ok(StatementIsA::ProjectAtom(ProjectAtom { ast: self.ast })),
+            NodeType::ProjectSignature => Ok(StatementIsA::ProjectSignature(ProjectSignature {
                 ast: self.ast,
             })),
-            ASTType::TheoryDefinition => Ok(StatementIsA::TheoryDefinition(TheoryDefinition {
+            NodeType::TheoryDefinition => Ok(StatementIsA::TheoryDefinition(TheoryDefinition {
                 ast: self.ast,
             })),
-            ASTType::Comment => Ok(StatementIsA::Comment(Comment { ast: self.ast })),
-            x => panic!("unexpected ASTType: {:?}", x),
+            NodeType::Comment => Ok(StatementIsA::Comment(Comment { ast: self.ast })),
+            x => panic!("unexpected NodeType: {:?}", x),
         }
     }
     pub fn to_string(&self) -> Result<String, ClingoError> {
@@ -878,6 +865,315 @@ impl<'a> From<TheoryDefinition<'a>> for Statement<'a> {
 impl<'a> From<Comment<'a>> for Statement<'a> {
     fn from(x: Comment<'a>) -> Self {
         Statement { ast: x.ast }
+    }
+}
+
+/// A generic handle to a node of the AST.
+///
+/// In contrast to the typed AST structs, a node gives access to all attributes of the
+/// underlying clingo AST node, similar to `Clingo::AST::Node` in clingo's C++ API.
+/// Which attributes a node has depends on its [`NodeType`].
+///
+/// **Note:** AST nodes are reference counted by clingo. A node obtained from an attribute is
+/// shared with its parent, so modifying it modifies the parent as well. Use [`Clone`] to obtain
+/// a deep copy and [`Node::copy()`] to obtain a shallow copy.
+#[derive(Debug, Clone)]
+pub struct Node<'a> {
+    pub(crate) ast: Ast<'a>,
+}
+impl<'a> Node<'a> {
+    /// Get the type of the node.
+    pub fn node_type(&self) -> Result<NodeType, ClingoError> {
+        self.ast.get_type()
+    }
+    /// Check if the node has the given attribute.
+    pub fn has_attribute(&self, attribute: Attribute) -> Result<bool, ClingoError> {
+        self.ast.has_attribute(attribute)
+    }
+    /// Get the type of the given attribute.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the node does not have the attribute
+    pub fn attribute_type(&self, attribute: Attribute) -> Result<AttributeType, ClingoError> {
+        self.ast.get_attribute_type(attribute)
+    }
+    /// Get the value of an attribute of type [`AttributeType::Number`].
+    pub fn get_number(&self, attribute: Attribute) -> Result<i32, ClingoError> {
+        self.ast.get_attribute_number(attribute)
+    }
+    /// Set the value of an attribute of type [`AttributeType::Number`].
+    pub fn set_number(&mut self, attribute: Attribute, value: i32) -> Result<(), ClingoError> {
+        self.ast.set_attribute_number(attribute, value)
+    }
+    /// Get the value of an attribute of type [`AttributeType::Symbol`].
+    pub fn get_symbol(&self, attribute: Attribute) -> Result<Symbol, ClingoError> {
+        self.ast.get_attribute_symbol(attribute)
+    }
+    /// Set the value of an attribute of type [`AttributeType::Symbol`].
+    pub fn set_symbol(&mut self, attribute: Attribute, value: Symbol) -> Result<(), ClingoError> {
+        self.ast.set_attribute_symbol(attribute, value)
+    }
+    /// Get the value of an attribute of type [`AttributeType::Location`].
+    pub fn get_location(&self, attribute: Attribute) -> Result<Location, ClingoError> {
+        self.ast.get_attribute_location(attribute)
+    }
+    /// Set the value of an attribute of type [`AttributeType::Location`].
+    pub fn set_location(
+        &mut self,
+        attribute: Attribute,
+        value: &Location,
+    ) -> Result<(), ClingoError> {
+        self.ast.set_attribute_location(attribute, value)
+    }
+    /// Get the value of an attribute of type [`AttributeType::String`].
+    pub fn get_string(&self, attribute: Attribute) -> Result<&'static str, ClingoError> {
+        self.ast.get_attribute_string(attribute)
+    }
+    /// Set the value of an attribute of type [`AttributeType::String`].
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `value` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    pub fn set_string(&mut self, attribute: Attribute, value: &str) -> Result<(), ClingoError> {
+        self.ast.set_attribute_string(attribute, value)
+    }
+    /// Get the value of an attribute of type [`AttributeType::Ast`].
+    pub fn get_ast(&self, attribute: Attribute) -> Result<Node<'a>, ClingoError> {
+        let ast = self.ast.get_attribute_ast(attribute)?;
+        Ok(Node { ast })
+    }
+    /// Set the value of an attribute of type [`AttributeType::Ast`].
+    pub fn set_ast(&mut self, attribute: Attribute, value: &Node) -> Result<(), ClingoError> {
+        self.ast.set_attribute_ast(attribute, &value.ast)
+    }
+    /// Get the value of an attribute of type [`AttributeType::OptionalAst`].
+    pub fn get_optional_ast(&self, attribute: Attribute) -> Result<Option<Node<'a>>, ClingoError> {
+        let ast = self.ast.get_attribute_optional_ast(attribute)?;
+        Ok(ast.map(|ast| Node { ast }))
+    }
+    /// Set the value of an attribute of type [`AttributeType::OptionalAst`].
+    pub fn set_optional_ast(
+        &mut self,
+        attribute: Attribute,
+        value: Option<&Node>,
+    ) -> Result<(), ClingoError> {
+        self.ast
+            .set_attribute_optional_ast(attribute, value.map(|node| &node.ast))
+    }
+    /// Get the size of an attribute of type [`AttributeType::StringArray`].
+    pub fn string_array_size(&self, attribute: Attribute) -> Result<usize, ClingoError> {
+        self.ast.size_attribute_string_array(attribute)
+    }
+    /// Get the value of an attribute of type [`AttributeType::StringArray`] at the given index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn get_string_at(
+        &self,
+        attribute: Attribute,
+        index: usize,
+    ) -> Result<&'static str, ClingoError> {
+        self.ast.get_attribute_string_at(attribute, index)
+    }
+    /// Set the value of an attribute of type [`AttributeType::StringArray`] at the given index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `value` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn set_string_at(
+        &mut self,
+        attribute: Attribute,
+        index: usize,
+        value: &str,
+    ) -> Result<(), ClingoError> {
+        self.ast.set_attribute_string_at(attribute, index, value)
+    }
+    /// Insert a value into an attribute of type [`AttributeType::StringArray`] at the given
+    /// index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `value` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is greater than the size of the array
+    pub fn insert_string_at(
+        &mut self,
+        attribute: Attribute,
+        index: usize,
+        value: &str,
+    ) -> Result<(), ClingoError> {
+        self.ast.insert_attribute_string_at(attribute, index, value)
+    }
+    /// Remove an element from an attribute of type [`AttributeType::StringArray`] at the given
+    /// index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn delete_string_at(&mut self, attribute: Attribute, index: usize) -> Result<(), ClingoError> {
+        self.ast.delete_attribute_string_at(attribute, index)
+    }
+    /// Get the size of an attribute of type [`AttributeType::AstArray`].
+    pub fn ast_array_size(&self, attribute: Attribute) -> Result<usize, ClingoError> {
+        self.ast.size_attribute_ast_array(attribute)
+    }
+    /// Get the value of an attribute of type [`AttributeType::AstArray`] at the given index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn get_ast_at(&self, attribute: Attribute, index: usize) -> Result<Node<'a>, ClingoError> {
+        let ast = self.ast.get_attribute_ast_at(attribute, index)?;
+        Ok(Node { ast })
+    }
+    /// Set the value of an attribute of type [`AttributeType::AstArray`] at the given index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn set_ast_at(
+        &mut self,
+        attribute: Attribute,
+        index: usize,
+        value: &Node,
+    ) -> Result<(), ClingoError> {
+        self.ast.set_attribute_ast_at(attribute, index, &value.ast)
+    }
+    /// Insert a value into an attribute of type [`AttributeType::AstArray`] at the given index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is greater than the size of the array
+    pub fn insert_ast_at(
+        &mut self,
+        attribute: Attribute,
+        index: usize,
+        value: &Node,
+    ) -> Result<(), ClingoError> {
+        self.ast.insert_attribute_ast_at(attribute, index, &value.ast)
+    }
+    /// Remove an element from an attribute of type [`AttributeType::AstArray`] at the given
+    /// index.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the index is out of range
+    pub fn delete_ast_at(&mut self, attribute: Attribute, index: usize) -> Result<(), ClingoError> {
+        self.ast.delete_attribute_ast_at(attribute, index)
+    }
+    /// Create a shallow copy of the node.
+    ///
+    /// The attributes of the copy share their AST nodes with the original.
+    pub fn copy(&self) -> Result<Node<'a>, ClingoError> {
+        let ast = self.ast.copy()?;
+        Ok(Node { ast })
+    }
+    pub fn to_string(&self) -> Result<String, ClingoError> {
+        self.ast.to_string()
+    }
+}
+impl<'a> fmt::Display for Node<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.ast)
+    }
+}
+macro_rules! impl_from_for_node {
+    ($($t:ident),*) => {
+        $(impl<'a> From<$t<'a>> for Node<'a> {
+            fn from(x: $t<'a>) -> Self {
+                Node { ast: x.ast }
+            }
+        })*
+    };
+}
+impl_from_for_node!(
+    Term,
+    Literal,
+    Head,
+    BodyLiteral,
+    BodyAtom,
+    TheoryTerm,
+    Statement,
+    Id,
+    Variable,
+    SymbolicTerm,
+    Function,
+    UnaryOperation,
+    BinaryOperation,
+    Interval,
+    Pool,
+    SymbolicAtom,
+    Guard,
+    Comparison,
+    ConditionalLiteral,
+    Aggregate,
+    BodyAggregateElement,
+    BodyAggregate,
+    HeadAggregateElement,
+    HeadAggregate,
+    Disjunction,
+    DisjointElement,
+    Disjoint,
+    TheorySequence,
+    TheoryFunction,
+    TheoryUnparsedTermElement,
+    TheoryUnparsedTerm,
+    TheoryGuard,
+    TheoryAtomElement,
+    TheoryAtom,
+    AtomicLiteral,
+    BasicLiteral,
+    TheoryOperatorDefinition,
+    TheoryTermDefinition,
+    TheoryGuardDefinition,
+    TheoryAtomDefinition,
+    Rule,
+    Definition,
+    ShowSignature,
+    ShowTerm,
+    Minimize,
+    Script,
+    Program,
+    External,
+    Edge,
+    Heuristic,
+    ProjectAtom,
+    ProjectSignature,
+    Defined,
+    TheoryDefinition,
+    Comment
+);
+impl<'a> TryFrom<Node<'a>> for Statement<'a> {
+    type Error = ClingoError;
+
+    /// Convert a node into a statement, e.g., to add a modified node with
+    /// [`ProgramBuilder::add()`].
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+    ///   if the node is not a statement
+    fn try_from(node: Node<'a>) -> Result<Self, Self::Error> {
+        if node.ast.get_type()?.is_statement() {
+            Ok(Statement { ast: node.ast })
+        } else {
+            set_internal_error(ErrorType::Runtime, "the node is not a statement");
+            Err(ClingoError::new_internal(
+                "Failed to convert a node into a statement.",
+            ))
+        }
     }
 }
 #[derive(Debug, Clone)]
@@ -1203,7 +1499,7 @@ impl<'a> Comment<'a> {
 //     pub fn clingo_ast_build(type_: clingo_ast_type_t, ast: *mut *mut clingo_ast_t, ...) -> bool;
 // }
 
-/// Construct an AST node of type `ASTType.Id`.
+/// Construct an AST node of type `NodeType.Id`.
 pub fn id<'a>(location: &Location, name: &str) -> Result<Id<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
     let variable = internalize_string(name)?;
@@ -1231,7 +1527,7 @@ pub fn id<'a>(location: &Location, name: &str) -> Result<Id<'a>, ClingoError> {
         })?,
     }
 }
-/// Construct an AST node of type `ASTType.Variable`.
+/// Construct an AST node of type `NodeType.Variable`.
 pub fn variable<'a>(location: &Location, name: &str) -> Result<Variable<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
 
@@ -1260,7 +1556,7 @@ pub fn variable<'a>(location: &Location, name: &str) -> Result<Variable<'a>, Cli
         })?,
     }
 }
-/// Construct an AST node of type `ASTType.SymbolicTerm`.
+/// Construct an AST node of type `NodeType.SymbolicTerm`.
 pub fn symbolic_term<'a>(
     location: &Location,
     symbol: &Symbol,
@@ -1293,7 +1589,7 @@ pub fn symbolic_term<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Function`.
+/// Construct an AST node of type `NodeType.Function`.
 pub fn function<'a>(
     location: &Location,
     name: &str,
@@ -1336,7 +1632,7 @@ pub fn function<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.UnaryOperation`.
+/// Construct an AST node of type `NodeType.UnaryOperation`.
 pub fn unary_operation<'a, T>(
     location: &Location,
     operator_type: UnaryOperator,
@@ -1374,7 +1670,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.BinaryOperation`.
+/// Construct an AST node of type `NodeType.BinaryOperation`.
 pub fn binary_operation<'a, T1, T2>(
     location: &Location,
     operator_type: BinaryOperator,
@@ -1415,7 +1711,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Interval`.
+/// Construct an AST node of type `NodeType.Interval`.
 pub fn interval<'a, T1, T2>(
     location: &Location,
     left: T1,
@@ -1453,7 +1749,7 @@ where
         })?,
     }
 }
-/// Construct an AST node of type `ASTType.Pool`.
+/// Construct an AST node of type `NodeType.Pool`.
 pub fn pool<'a>(location: &Location, arguments: &'a [Term]) -> Result<Pool<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
 
@@ -1483,7 +1779,7 @@ pub fn pool<'a>(location: &Location, arguments: &'a [Term]) -> Result<Pool<'a>, 
     }
 }
 
-/// Construct an AST node of type `ASTType.BooleanConstant`.
+/// Construct an AST node of type `NodeType.BooleanConstant`.
 fn boolean_constant<'a>(value: bool) -> Result<BooleanConstant<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
     if !unsafe {
@@ -1510,7 +1806,7 @@ fn boolean_constant<'a>(value: bool) -> Result<BooleanConstant<'a>, ClingoError>
     }
 }
 
-/// Construct an AST node of type `ASTType.SymbolicAtom`.
+/// Construct an AST node of type `NodeType.SymbolicAtom`.
 pub fn symbolic_atom<'a, T>(symbol: T) -> Result<SymbolicAtom<'a>, ClingoError>
 where
     T: Into<Term<'a>>,
@@ -1541,7 +1837,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Guard`.
+/// Construct an AST node of type `NodeType.Guard`.
 pub fn guard<'a, T>(operator: ComparisonOperator, term: T) -> Result<Guard<'a>, ClingoError>
 where
     T: Into<Term<'a>>,
@@ -1573,7 +1869,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Comparison`.
+/// Construct an AST node of type `NodeType.Comparison`.
 pub fn comparison<'a, T1>(term: T1, guards: &'a [Guard]) -> Result<Comparison<'a>, ClingoError>
 where
     T1: Into<Term<'a>>,
@@ -1606,7 +1902,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.ConditionalLiteral`.
+/// Construct an AST node of type `NodeType.ConditionalLiteral`.
 pub fn conditional_literal<'a, L>(
     location: &Location,
     literal: L,
@@ -1645,7 +1941,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Aggregate`.
+/// Construct an AST node of type `NodeType.Aggregate`.
 pub fn aggregate<'a>(
     location: &Location,
     left_guard: Option<Guard>,
@@ -1690,7 +1986,7 @@ pub fn aggregate<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.BodyAggregateElement`.
+/// Construct an AST node of type `NodeType.BodyAggregateElement`.
 pub fn body_aggregate_element<'a>(
     terms: &'a [Term],
     condition: &'a [Literal],
@@ -1723,7 +2019,7 @@ pub fn body_aggregate_element<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.BodyAggregate`.
+/// Construct an AST node of type `NodeType.BodyAggregate`.
 pub fn body_aggregate<'a>(
     location: &Location,
     left_guard: Option<Guard<'a>>,
@@ -1770,7 +2066,7 @@ pub fn body_aggregate<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.HeadAggregateElement`.
+/// Construct an AST node of type `NodeType.HeadAggregateElement`.
 pub fn head_aggregate_element<'a>(
     terms: &'a [Term],
     condition: ConditionalLiteral<'a>,
@@ -1802,7 +2098,7 @@ pub fn head_aggregate_element<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.HeadAggregate`.
+/// Construct an AST node of type `NodeType.HeadAggregate`.
 pub fn head_aggregate<'a>(
     location: &Location,
     left_guard: Option<Guard<'a>>,
@@ -1849,7 +2145,7 @@ pub fn head_aggregate<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Disjunction`.
+/// Construct an AST node of type `NodeType.Disjunction`.
 pub fn disjunction<'a>(
     location: &Location,
     elements: &'a [ConditionalLiteral],
@@ -1882,7 +2178,7 @@ pub fn disjunction<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheorySequence`.
+/// Construct an AST node of type `NodeType.TheorySequence`.
 pub fn theory_sequence<'a>(
     location: &Location,
     sequence_type: TheoryTermSequenceType,
@@ -1917,7 +2213,7 @@ pub fn theory_sequence<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryFunction`.
+/// Construct an AST node of type `NodeType.TheoryFunction`.
 pub fn theory_function<'a>(
     location: &Location,
     name: &str,
@@ -1952,7 +2248,7 @@ pub fn theory_function<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryUnparsedTermElement`.
+/// Construct an AST node of type `NodeType.TheoryUnparsedTermElement`.
 pub fn theory_unparsed_term_element<'a>(
     operators: &[&str],
     term: TheoryTerm,
@@ -1985,7 +2281,7 @@ pub fn theory_unparsed_term_element<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryUnparsedTerm`.
+/// Construct an AST node of type `NodeType.TheoryUnparsedTerm`.
 pub fn theory_unparsed_term<'a>(
     location: &Location,
     elements: Vec1<TheoryUnparsedTermElement>,
@@ -2018,7 +2314,7 @@ pub fn theory_unparsed_term<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryGuard`.
+/// Construct an AST node of type `NodeType.TheoryGuard`.
 pub fn theory_guard<'a, T>(operator_name: &str, term: T) -> Result<TheoryGuard<'_>, ClingoError>
 where
     T: Into<TheoryTerm<'a>>,
@@ -2051,7 +2347,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryAtomElement`.
+/// Construct an AST node of type `NodeType.TheoryAtomElement`.
 pub fn theory_atom_element<'a>(
     terms: &'a [TheoryTerm],
     condition: &'a [Literal],
@@ -2084,7 +2380,7 @@ pub fn theory_atom_element<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryAtom`.
+/// Construct an AST node of type `NodeType.TheoryAtom`.
 pub fn theory_atom<'a, T>(
     location: &Location,
     term: T,
@@ -2128,7 +2424,7 @@ where
         })?,
     }
 }
-/// Construct an AST node of type `ASTType.Literal`.
+/// Construct an AST node of type `NodeType.Literal`.
 pub fn atomic_literal_from_body_atom<'a, BA>(
     location: &Location,
     sign: Sign,
@@ -2166,7 +2462,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Literal`.
+/// Construct an AST node of type `NodeType.Literal`.
 pub fn basic_literal_from_symbolic_atom<'a>(
     location: &Location,
     sign: Sign,
@@ -2200,7 +2496,7 @@ pub fn basic_literal_from_symbolic_atom<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Literal`.
+/// Construct an AST node of type `NodeType.Literal`.
 pub fn basic_literal_from_boolean_constant(
     location: &Location,
     sign: Sign,
@@ -2234,7 +2530,7 @@ pub fn basic_literal_from_boolean_constant(
         })?,
     }
 }
-/// Construct an AST node of type `ASTType.Literal`.
+/// Construct an AST node of type `NodeType.Literal`.
 pub fn basic_literal_from_comparison<'a>(
     location: &Location,
     sign: Sign,
@@ -2268,7 +2564,7 @@ pub fn basic_literal_from_comparison<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryOperatorDefinition`.
+/// Construct an AST node of type `NodeType.TheoryOperatorDefinition`.
 pub fn theory_operator_definition<'a>(
     location: &Location,
     name: &str,
@@ -2305,7 +2601,7 @@ pub fn theory_operator_definition<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryTermDefinition`.
+/// Construct an AST node of type `NodeType.TheoryTermDefinition`.
 pub fn theory_term_definition<'a>(
     location: &Location,
     name: &str,
@@ -2341,7 +2637,7 @@ pub fn theory_term_definition<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryGuardDefinition`.
+/// Construct an AST node of type `NodeType.TheoryGuardDefinition`.
 pub fn theory_guard_definition<'a>(
     operators: &[&str],
     term: &str,
@@ -2383,7 +2679,7 @@ pub fn theory_guard_definition<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryAtomDefinition`.
+/// Construct an AST node of type `NodeType.TheoryAtomDefinition`.
 pub fn theory_atom_definition<'a>(
     location: &Location,
     atom_type: TheoryAtomType,
@@ -2429,7 +2725,7 @@ pub fn theory_atom_definition<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Rule`.
+/// Construct an AST node of type `NodeType.Rule`.
 pub fn rule<'a, H>(
     location: &Location,
     head: H,
@@ -2468,7 +2764,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Definition`.
+/// Construct an AST node of type `NodeType.Definition`.
 pub fn definition<'a, T>(
     location: &Location,
     name: &str,
@@ -2509,7 +2805,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.ShowSignature`.
+/// Construct an AST node of type `NodeType.ShowSignature`.
 pub fn show_signature<'a>(
     location: &Location,
     name: &str,
@@ -2548,7 +2844,7 @@ pub fn show_signature<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.ShowTerm`.
+/// Construct an AST node of type `NodeType.ShowTerm`.
 pub fn show_term<'a, T>(
     location: &Location,
     term: T,
@@ -2588,7 +2884,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Minimize`.
+/// Construct an AST node of type `NodeType.Minimize`.
 pub fn minimize<'a, T1, T2>(
     location: &Location,
     weight: T1,
@@ -2634,7 +2930,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Script`.
+/// Construct an AST node of type `NodeType.Script`.
 pub fn script<'a>(location: &Location, name: &str, code: &str) -> Result<Script<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
     let code = internalize_string(code);
@@ -2665,7 +2961,7 @@ pub fn script<'a>(location: &Location, name: &str, code: &str) -> Result<Script<
     }
 }
 
-/// Construct an AST node of type `ASTType.Program`.
+/// Construct an AST node of type `NodeType.Program`.
 pub fn program<'a>(
     location: &Location,
     name: &str,
@@ -2755,7 +3051,7 @@ pub fn external<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Edge`.
+/// Construct an AST node of type `NodeType.Edge`.
 pub fn edge<'a, T1, T2>(
     location: &Location,
     node_u: T1,
@@ -2798,7 +3094,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.Heuristic`.
+/// Construct an AST node of type `NodeType.Heuristic`.
 pub fn heuristic<'a, T1, T2, T3>(
     location: &Location,
     atom: SymbolicAtom<'a>,
@@ -2847,7 +3143,7 @@ where
     }
 }
 
-/// Construct an AST node of type `ASTType.ProjectAtom`.
+/// Construct an AST node of type `NodeType.ProjectAtom`.
 pub fn project_atom<'a>(
     location: &Location,
     atom: SymbolicAtom<'a>,
@@ -2882,7 +3178,7 @@ pub fn project_atom<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.ProjectSignature`.
+/// Construct an AST node of type `NodeType.ProjectSignature`.
 pub fn project_signature<'a>(
     location: &Location,
     name: &str,
@@ -2919,7 +3215,7 @@ pub fn project_signature<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Defined`.
+/// Construct an AST node of type `NodeType.Defined`.
 pub fn defined<'a>(
     location: &Location,
     name: &str,
@@ -2956,7 +3252,7 @@ pub fn defined<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.TheoryDefinition`.
+/// Construct an AST node of type `NodeType.TheoryDefinition`.
 pub fn theory_definition<'a>(
     location: &Location,
     name: &str,
@@ -2995,7 +3291,7 @@ pub fn theory_definition<'a>(
     }
 }
 
-/// Construct an AST node of type `ASTType.Comment`.
+/// Construct an AST node of type `NodeType.Comment`.
 ///
 /// The `value` is the text of the comment including the comment markers, e.g. `% comment`.
 pub fn comment<'a>(
