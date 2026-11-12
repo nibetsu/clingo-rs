@@ -837,6 +837,19 @@ fn temp_file(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("clingo-rs-{}-{}", std::process::id(), name))
 }
 #[test]
+fn control_load() {
+    let path = temp_file("program.lp");
+    std::fs::write(&path, "a. {b}.").unwrap();
+    let mut ctl = control(vec!["0".into()]).unwrap();
+    ctl.load(path.to_str().unwrap()).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    assert_eq!(models(ctl), [vec!["a"], vec!["a", "b"]]);
+
+    let mut ctl = control(vec![]).unwrap();
+    assert!(ctl.load(path.to_str().unwrap()).is_err());
+}
+#[test]
 fn control_aspif_backend() {
     let path = temp_file("program.aspif");
     let file = path.to_str().unwrap();

@@ -2047,7 +2047,26 @@ impl<C: ControlCtx> GenericControl<C> {
         }
     }
 
-    // NODO: pub fn clingo_control_load(control: *mut Control, file: *const c_char) -> bool;
+    /// Extend the logic program with a program in a file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - path to the file
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if `file` contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    ///   or [`ErrorCode::Runtime`] if parsing or checking fails
+    pub fn load(&mut self, file: &str) -> Result<(), ClingoError> {
+        let file = CString::new(file)?;
+        if !unsafe { clingo_control_load(self.ctl.as_ptr(), file.as_ptr()) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_load() failed",
+            ));
+        }
+        Ok(())
+    }
 
     /// Extend the logic program with the given non-ground logic program in string form.
     ///
