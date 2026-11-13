@@ -1379,7 +1379,7 @@ fn ast_unpool() {
         }
         // conditions are only unpooled in conditional literals
         let statements = stm.unpool(UnpoolType::Condition).unwrap();
-        assert_eq!(statements, [stm.clone()]);
+        assert_eq!(statements, std::slice::from_ref(stm));
     });
     for_each_statement("a :- b(1;2) : c(X;Y).", |stm| {
         let rule = Node::from(stm.clone());
