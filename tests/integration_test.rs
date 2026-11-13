@@ -1401,3 +1401,29 @@ fn ast_unpool() {
         assert_eq!(strings(nodes), ["a."]);
     });
 }
+#[test]
+fn ast_parse_files() {
+    let path1 = temp_file("parse1.lp");
+    let path2 = temp_file("parse2.lp");
+    std::fs::write(&path1, "a :- b.").unwrap();
+    std::fs::write(&path2, "% comment\nb.").unwrap();
+    let mut collector = StatementCollector::default();
+    parse_files_with_statement_handler(
+        &[path1.to_str().unwrap(), path2.to_str().unwrap()],
+        &mut collector,
+    )
+    .unwrap();
+    std::fs::remove_file(&path1).unwrap();
+    std::fs::remove_file(&path2).unwrap();
+    // each file starts with its own base program
+    let mut statements = collector.statements;
+    statements.sort();
+    assert_eq!(
+        statements,
+        ["#program base.", "#program base.", "% comment", "a :- b.", "b."]
+    );
+
+    let mut collector = StatementCollector::default();
+    assert!(parse_files_with_statement_handler(&[path1.to_str().unwrap()], &mut collector).is_err());
+    assert!(parse_files_with_statement_handler(&["a\0"], &mut collector).is_err());
+}

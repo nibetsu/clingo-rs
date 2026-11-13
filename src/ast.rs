@@ -8,6 +8,7 @@ pub use crate::ast_internals::{Attribute, AttributeType, NodeType, UnpoolType};
 use crate::ast_internals::Ast;
 use clingo_sys::*;
 use std::ffi::CStr;
+use std::ffi::NulError;
 use std::str::Utf8Error;
 use std::{
     ffi::CString,
@@ -228,6 +229,53 @@ pub fn parse_string_with_statement_handler<
     } {
         return Err(ClingoError::new_internal(
             "Call to clingo_ast_parse_string() failed",
+        ));
+    }
+    Ok(())
+}
+/// Parse the programs in the given files and call the handler for each statement.
+///
+/// The function follows clingo's handling of files on the command line:
+/// filename `"-"` is treated as stdin and if an empty list is given, then the parser reads from
+/// stdin.
+///
+/// # Arguments
+///
+/// * `files` - the files to parse
+/// * `handler` - implementing the trait [`StatementHandler`]
+///
+/// # Errors
+///
+/// - [`ClingoError::NulError`] - if a file name contains a nul byte
+/// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
+///   if parsing fails or [`ErrorCode::BadAlloc`](crate::ErrorCode::BadAlloc)
+pub fn parse_files_with_statement_handler<T: StatementHandler>(
+    files: &[&str],
+    handler: &mut T,
+) -> Result<(), ClingoError> {
+    let files = files
+        .iter()
+        .map(|file| CString::new(*file))
+        .collect::<Result<Vec<CString>, NulError>>()?;
+    let c_files = files
+        .iter()
+        .map(|file| file.as_ptr())
+        .collect::<Vec<*const c_char>>();
+    let handler = handler as *mut T;
+    if !unsafe {
+        clingo_ast_parse_files(
+            c_files.as_ptr(),
+            c_files.len(),
+            Some(unsafe_ast_callback::<T> as ASTCallback),
+            handler as *mut c_void,
+            std::ptr::null_mut(),
+            None,
+            std::ptr::null_mut(),
+            0,
+        )
+    } {
+        return Err(ClingoError::new_internal(
+            "Call to clingo_ast_parse_files() failed",
         ));
     }
     Ok(())
