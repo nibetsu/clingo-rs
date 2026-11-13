@@ -1357,3 +1357,47 @@ fn ast_node_compare_and_hash() {
         assert!((rule < other) != (other < rule));
     });
 }
+#[test]
+fn ast_unpool() {
+    let strings = |nodes: Vec<Node>| -> Vec<String> {
+        nodes.iter().map(|node| node.to_string().unwrap()).collect()
+    };
+    for_each_statement("a(1;2) :- b(X;Y).", |stm| {
+        let unpooled = [
+            "a(1) :- b(X).",
+            "a(2) :- b(X).",
+            "a(1) :- b(Y).",
+            "a(2) :- b(Y).",
+        ];
+        for unpool_type in [UnpoolType::Other, UnpoolType::All] {
+            let statements = stm.unpool(unpool_type).unwrap();
+            let statements: Vec<String> = statements
+                .iter()
+                .map(|stm| stm.to_string().unwrap())
+                .collect();
+            assert_eq!(statements, unpooled);
+        }
+        // conditions are only unpooled in conditional literals
+        let statements = stm.unpool(UnpoolType::Condition).unwrap();
+        assert_eq!(statements, [stm.clone()]);
+    });
+    for_each_statement("a :- b(1;2) : c(X;Y).", |stm| {
+        let rule = Node::from(stm.clone());
+        let literal = rule.get_ast_at(Attribute::Body, 0).unwrap();
+        assert_eq!(literal.node_type().unwrap(), NodeType::ConditionalLiteral);
+        assert_eq!(
+            strings(literal.unpool(UnpoolType::Condition).unwrap()),
+            ["b(1;2): c(X)", "b(1;2): c(Y)"]
+        );
+        assert_eq!(
+            strings(literal.unpool(UnpoolType::Other).unwrap()),
+            ["b(1): c(X;Y)", "b(2): c(X;Y)"]
+        );
+        assert_eq!(literal.unpool(UnpoolType::All).unwrap().len(), 4);
+    });
+    for_each_statement("a.", |stm| {
+        // nothing to unpool
+        let nodes = Node::from(stm.clone()).unpool(UnpoolType::All).unwrap();
+        assert_eq!(strings(nodes), ["a."]);
+    });
+}

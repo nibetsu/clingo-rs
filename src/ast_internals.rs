@@ -2,6 +2,7 @@ use crate::ast::{BodyLiteral, Head, Location, Term, TheoryAtomElement, TheoryGua
 use crate::{ClingoError, Symbol};
 use clingo_sys::*;
 use std::marker::PhantomData;
+use std::os::raw::c_void;
 use std::ptr::NonNull;
 use crate::{set_internal_error, ErrorType};
 use std::cmp::Ordering;
@@ -1047,6 +1048,49 @@ impl<'a> Ast<'a> {
             ));
         }
         Ok(())
+    }
+}
+
+impl<'a> Ast<'a> {
+    /// Unpool the AST node.
+    ///
+    /// might set one of the following error codes:
+    /// - ::clingo_error_bad_alloc
+    pub(crate) fn unpool(&self, unpool_type: UnpoolType) -> Result<Vec<Ast<'a>>, ClingoError> {
+        let mut asts: Vec<Ast<'a>> = vec![];
+        if !unsafe {
+            clingo_ast_unpool(
+                self.ptr.as_ptr(),
+                unpool_type as clingo_ast_unpool_type_bitset_t,
+                Some(unsafe_unpool_callback),
+                &mut asts as *mut Vec<Ast<'a>> as *mut c_void,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_ast_unpool() failed.",
+            ));
+        }
+        Ok(asts)
+    }
+}
+unsafe extern "C" fn unsafe_unpool_callback(ast: *mut clingo_ast_t, data: *mut c_void) -> bool {
+    // check for null pointers
+    if ast.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_unpool_callback() got a null pointer.",
+        );
+        return false;
+    }
+    let asts = &mut *(data as *mut Vec<Ast>);
+    // the reference count of callback arguments is not incremented
+    clingo_ast_acquire(ast);
+    match Ast::from_ptr(ast) {
+        Ok(ast) => {
+            asts.push(ast);
+            true
+        }
+        Err(_) => false,
     }
 }
 

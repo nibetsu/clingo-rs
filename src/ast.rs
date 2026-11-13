@@ -4,7 +4,7 @@ use crate::{
 };
 
 use crate::ast_internals::Body;
-pub use crate::ast_internals::{Attribute, AttributeType, NodeType};
+pub use crate::ast_internals::{Attribute, AttributeType, NodeType, UnpoolType};
 use crate::ast_internals::Ast;
 use clingo_sys::*;
 use std::ffi::CStr;
@@ -773,6 +773,21 @@ impl<'a> Statement<'a> {
     pub fn to_string(&self) -> Result<String, ClingoError> {
         self.ast.to_string()
     }
+    /// Unpool the statement.
+    ///
+    /// Returns the statement itself if there is nothing to unpool.
+    ///
+    /// # Arguments
+    ///
+    /// * `unpool_type` - what to unpool
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`](crate::ErrorCode::BadAlloc)
+    pub fn unpool(&self, unpool_type: UnpoolType) -> Result<Vec<Statement<'a>>, ClingoError> {
+        let asts = self.ast.unpool(unpool_type)?;
+        Ok(asts.into_iter().map(|ast| Statement { ast }).collect())
+    }
 }
 #[derive(Debug, Clone)]
 pub enum StatementIsA<'a> {
@@ -1074,6 +1089,21 @@ impl<'a> Node<'a> {
     ///   if the index is out of range
     pub fn delete_ast_at(&mut self, attribute: Attribute, index: usize) -> Result<(), ClingoError> {
         self.ast.delete_attribute_ast_at(attribute, index)
+    }
+    /// Unpool the node.
+    ///
+    /// Returns the node itself if there is nothing to unpool.
+    ///
+    /// # Arguments
+    ///
+    /// * `unpool_type` - what to unpool
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`](crate::ErrorCode::BadAlloc)
+    pub fn unpool(&self, unpool_type: UnpoolType) -> Result<Vec<Node<'a>>, ClingoError> {
+        let asts = self.ast.unpool(unpool_type)?;
+        Ok(asts.into_iter().map(|ast| Node { ast }).collect())
     }
     /// Create a shallow copy of the node.
     ///
