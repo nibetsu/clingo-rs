@@ -1312,3 +1312,48 @@ fn ast_node_copy_and_statement() {
         assert!(Statement::try_from(literal).is_err());
     });
 }
+#[test]
+fn ast_node_compare_and_hash() {
+    use std::collections::{BTreeSet, HashSet};
+    let loc1 = Location::new("a.lp", "a.lp", 1, 1, 1, 2).unwrap();
+    let loc2 = Location::new("b.lp", "b.lp", 3, 3, 1, 2).unwrap();
+    let one_a = symbolic_term(&loc1, &Symbol::create_number(1)).unwrap();
+    let one_b = symbolic_term(&loc2, &Symbol::create_number(1)).unwrap();
+    let two = symbolic_term(&loc1, &Symbol::create_number(2)).unwrap();
+    // locations are ignored
+    assert_eq!(one_a, one_b);
+    assert_ne!(one_a, two);
+    assert!(one_a < two);
+    assert!(two > one_b);
+
+    let set: HashSet<Node> = [one_a.clone(), one_b.clone(), two.clone()]
+        .into_iter()
+        .map(Node::from)
+        .collect();
+    assert_eq!(set.len(), 2);
+    let sorted: Vec<String> = [two, one_a, one_b]
+        .into_iter()
+        .map(Node::from)
+        .collect::<BTreeSet<Node>>()
+        .iter()
+        .map(|node| node.to_string().unwrap())
+        .collect();
+    assert_eq!(sorted, ["1", "2"]);
+
+    for_each_statement("a :- b.", |stm| {
+        let rule = Node::from(stm.clone());
+        let mut other = rule.clone();
+        other
+            .set_location(Attribute::Location, &Location::default())
+            .unwrap();
+        assert_eq!(rule, other);
+        assert_eq!(stm.clone(), Statement::try_from(other.clone()).unwrap());
+        other
+            .get_ast_at(Attribute::Body, 0)
+            .unwrap()
+            .set_number(Attribute::Sign, Sign::Negation as i32)
+            .unwrap();
+        assert_ne!(rule, other);
+        assert!((rule < other) != (other < rule));
+    });
+}

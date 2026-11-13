@@ -4,7 +4,9 @@ use clingo_sys::*;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use crate::{set_internal_error, ErrorType};
+use std::cmp::Ordering;
 use std::ffi::{CStr, CString};
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
 pub struct Body<'a>(ASTArray<'a>);
@@ -358,6 +360,37 @@ impl<'a> fmt::Display for Ast<'a> {
             Ok(string) => write!(f, "{}", string),
             Err(_) => Err(fmt::Error),
         }
+    }
+}
+
+impl<'a> PartialEq for Ast<'a> {
+    /// Equality compare two AST nodes ignoring their locations.
+    fn eq(&self, other: &Ast) -> bool {
+        unsafe { clingo_ast_equal(self.ptr.as_ptr(), other.ptr.as_ptr()) }
+    }
+}
+impl<'a> Eq for Ast<'a> {}
+impl<'a> PartialOrd for Ast<'a> {
+    fn partial_cmp(&self, other: &Ast<'a>) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<'a> Ord for Ast<'a> {
+    /// Compare two AST nodes ignoring their locations.
+    fn cmp(&self, other: &Ast<'a>) -> Ordering {
+        if unsafe { clingo_ast_less_than(self.ptr.as_ptr(), other.ptr.as_ptr()) } {
+            return Ordering::Less;
+        }
+        if unsafe { clingo_ast_less_than(other.ptr.as_ptr(), self.ptr.as_ptr()) } {
+            return Ordering::Greater;
+        }
+        Ordering::Equal
+    }
+}
+impl<'a> Hash for Ast<'a> {
+    /// Calculate a hash code of an AST node ignoring its location.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unsafe { clingo_ast_hash(self.ptr.as_ptr()) }.hash(state);
     }
 }
 
