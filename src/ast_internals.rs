@@ -1,4 +1,4 @@
-use crate::ast::{BodyLiteral, Head, Location, Term, TheoryAtomElement, TheoryGuard};
+use crate::ast::{BodyLiteral, Head, Location, Term};
 use crate::{ClingoError, Symbol};
 use clingo_sys::*;
 use std::marker::PhantomData;
@@ -418,16 +418,6 @@ impl<'a> Ast<'a> {
     pub(crate) fn set_term(&mut self, term: Term) {
         self.set_attribute_ast(Attribute::Term, &term.ast).unwrap();
     }
-    pub(crate) fn guard(&self) -> TheoryGuard<'_> {
-        // TODO: check
-        let ast = self.get_attribute_ast(Attribute::Guard).unwrap();
-        TheoryGuard { ast }
-    }
-    pub(crate) fn elements(&self) -> &[TheoryAtomElement<'_>] {
-        unimplemented!()
-        // let ast = self.get_attribute_ast(Attribute::Elements).unwrap();
-        // &[]
-    }
     pub(crate) fn left(&self) -> Term<'a> {
         let ast = self.get_attribute_ast(Attribute::Left).unwrap();
         Term { ast }
@@ -730,13 +720,6 @@ impl<'a> Ast<'a> {
             ));
         }
         Ok(())
-    }
-
-    pub(crate) fn name(&self) -> Result<String, ClingoError> {
-        let attribute = Attribute::Name;
-        let ast_attribute_type = self.get_attribute_type(attribute).unwrap();
-        dbg!(ast_attribute_type);
-        self.to_string()
     }
 
     /// Get the value of an attribute of type AttributeType::Ast

@@ -1289,8 +1289,9 @@ impl<'a> Function<'a> {
         self.ast.to_string()
     }
 
-    pub fn name(&self) -> String {
-        self.ast.name().unwrap()
+    /// Get the name of the function.
+    pub fn name(&self) -> Result<&'static str, ClingoError> {
+        self.ast.get_attribute_string(Attribute::Name)
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1446,11 +1447,20 @@ impl<'a> TheoryAtom<'a> {
     pub fn set_term(&mut self, term: Term) {
         self.ast.set_term(term)
     }
-    pub fn guard(&self) -> TheoryGuard<'_> {
-        self.ast.guard()
+    /// Get the guard of the theory atom if it has one.
+    pub fn guard(&self) -> Result<Option<TheoryGuard<'a>>, ClingoError> {
+        let ast = self.ast.get_attribute_optional_ast(Attribute::Guard)?;
+        Ok(ast.map(|ast| TheoryGuard { ast }))
     }
-    pub fn elements(&self) -> &[TheoryAtomElement<'_>] {
-        self.ast.elements()
+    /// Get the elements of the theory atom.
+    pub fn elements(&self) -> Result<Vec<TheoryAtomElement<'a>>, ClingoError> {
+        let size = self.ast.size_attribute_ast_array(Attribute::Elements)?;
+        (0..size)
+            .map(|index| {
+                let ast = self.ast.get_attribute_ast_at(Attribute::Elements, index)?;
+                Ok(TheoryAtomElement { ast })
+            })
+            .collect()
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

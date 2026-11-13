@@ -1427,3 +1427,26 @@ fn ast_parse_files() {
     assert!(parse_files_with_statement_handler(&[path1.to_str().unwrap()], &mut collector).is_err());
     assert!(parse_files_with_statement_handler(&["a\0"], &mut collector).is_err());
 }
+#[test]
+fn ast_function_name_and_theory_atom_parts() {
+    let loc = Location::default();
+    let one = symbolic_term(&loc, &Symbol::create_number(1)).unwrap();
+    let args = [one.clone().into()];
+    let fun = function(&loc, "f", &args, false).unwrap();
+    assert_eq!(fun.name().unwrap(), "f");
+
+    let name = symbolic_term(&loc, &Symbol::create_id("a", true).unwrap()).unwrap();
+    let tuple = [one.clone().into()];
+    let elements = [
+        theory_atom_element(&tuple, &[]).unwrap(),
+        theory_atom_element(&tuple, &[]).unwrap(),
+    ];
+    let atom = theory_atom(&loc, name.clone(), &elements, None).unwrap();
+    assert_eq!(atom.elements().unwrap(), elements);
+    assert!(atom.guard().unwrap().is_none());
+
+    let guard = theory_guard(">", one).unwrap();
+    let atom = theory_atom(&loc, name, &[], Some(guard.clone())).unwrap();
+    assert!(atom.elements().unwrap().is_empty());
+    assert_eq!(atom.guard().unwrap(), Some(guard));
+}
