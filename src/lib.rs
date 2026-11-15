@@ -4,6 +4,7 @@
 #![allow(clippy::try_err)]
 use bitflags::bitflags;
 use clingo_sys::*;
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::convert::Infallible;
@@ -16,6 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::str::Utf8Error;
 use std::time::Duration;
 use thiserror::Error;
@@ -1947,10 +1949,12 @@ impl<C: ControlCtx> GenericControl<C> {
     /// * `context` - implementing the trait [`ControlCtx`]
     pub fn register_control_context<T: ControlCtx>(mut self, context: T) -> GenericControl<T> {
         let context = Box::new(context);
+        // the new control object takes over the ownership (if any) of the clingo control
+        let copied = self.copied;
         self.copied = true;
         GenericControl {
             ctl: self.ctl,
-            copied: false,
+            copied,
             context,
         }
     }
@@ -5839,193 +5843,492 @@ pub struct MModel {
     pub model_type: ModelType,
     pub number: u64,
 }
-// #[doc = "! Callback to customize clingo main function."]
-// #[doc = "!"]
-// #[doc = "! @param[in] control corresponding control object"]
-// #[doc = "! @param[in] files files passed via command line arguments"]
-// #[doc = "! @param[in] size number of files"]
-// #[doc = "! @param[in] data user data for the callback"]
-// #[doc = "!"]
-// #[doc = "! @return whether the call was successful"]
-// pub type clingo_main_function_t = ::std::option::Option<
-//     unsafe extern "C" fn(
-//         control: *mut clingo_control_t,
-//         files: *const *const ::std::os::raw::c_char,
-//         size: usize,
-//         data: *mut ::std::os::raw::c_void,
-//     ) -> bool,
-// >;
-// #[doc = "! Callback to print a model in default format."]
-// #[doc = "!"]
-// #[doc = "! @param[in] data user data for the callback"]
-// #[doc = "!"]
-// #[doc = "! @return whether the call was successful"]
-// pub type clingo_default_model_printer_t =
-//     ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> bool>;
-// #[doc = "! Callback to customize model printing."]
-// #[doc = "!"]
-// #[doc = "! @param[in] model the model"]
-// #[doc = "! @param[in] printer the default model printer"]
-// #[doc = "! @param[in] printer_data user data for the printer"]
-// #[doc = "! @param[in] data user data for the callback"]
-// #[doc = "!"]
-// #[doc = "! @return whether the call was successful"]
-// pub type clingo_model_printer_t = ::std::option::Option<
-//     unsafe extern "C" fn(
-//         model: *const clingo_model_t,
-//         printer: clingo_default_model_printer_t,
-//         printer_data: *mut ::std::os::raw::c_void,
-//         data: *mut ::std::os::raw::c_void,
-//     ) -> bool,
-// >;
-// #[doc = "! This struct contains a set of functions to customize the clingo application."]
-// #[repr(C)]
-// #[derive(Debug, Copy, Clone)]
-// pub struct clingo_application {
-//     #[doc = "!< callback to obtain program name"]
-//     pub program_name: ::std::option::Option<
-//         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *const ::std::os::raw::c_char,
-//     >,
-//     #[doc = "!< callback to obtain version information"]
-//     pub version: ::std::option::Option<
-//         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> *const ::std::os::raw::c_char,
-//     >,
-//     #[doc = "!< callback to obtain message limit"]
-//     pub message_limit: ::std::option::Option<
-//         unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> ::std::os::raw::c_uint,
-//     >,
-//     #[doc = "!< callback to override clingo's main function"]
-//     pub main: clingo_main_function_t,
-//     #[doc = "!< callback to override default logger"]
-//     pub logger: clingo_logger_t,
-//     #[doc = "!< callback to override default model printing"]
-//     pub printer: clingo_model_printer_t,
-//     #[doc = "!< callback to register options"]
-//     pub register_options: ::std::option::Option<
-//         unsafe extern "C" fn(
-//             options: *mut clingo_options_t,
-//             data: *mut ::std::os::raw::c_void,
-//         ) -> bool,
-//     >,
-//     #[doc = "!< callback validate options"]
-//     pub validate_options:
-//         ::std::option::Option<unsafe extern "C" fn(data: *mut ::std::os::raw::c_void) -> bool>,
-// }
-// #[doc = "! This struct contains a set of functions to customize the clingo application."]
-// pub type clingo_application_t = clingo_application;
-// pub trait Application {
-//     fn program_name(&self) -> String;
+/// Report an error returned by a Rust callback to clingo.
+fn set_callback_error(error: &ClingoError) {
+    let (code, message) = match error {
+        ClingoError::InternalError { code, last, .. } if !last.is_empty() => {
+            let code = match code {
+                ErrorCode::Runtime => ErrorType::Runtime,
+                ErrorCode::Logic => ErrorType::Logic,
+                ErrorCode::BadAlloc => ErrorType::BadAlloc,
+                _ => ErrorType::Unknown,
+            };
+            (code, last.to_string())
+        }
+        error => (ErrorType::Runtime, error.to_string()),
+    };
+    if set_error(code, &message).is_err() {
+        set_internal_error(code, "Error in callback.");
+    }
+}
 
-// }
-// unsafe extern "C" fn unsafe_program_name<T: Application>(data: *mut ::std::os::raw::c_void) -> *const ::std::os::raw::c_char {
-//     // check for null pointers
-//     if data.is_null()
-//     {
-//         set_internal_error(
-//             ErrorType::Runtime,
-//             "unsafe_program_name() got a null pointer.",
-//         );
-//         return std::ptr::null();
-//     }
-//     let data = &mut *(data as *mut T);
-//     let name = data.program_name();
-//     let c_name: CStr = name.into();
-//     c_name.as_ptr()
-// }
-// extern "C" {
-//     #[doc = "! Add an option that is processed with a custom parser."]
-//     #[doc = "!"]
-//     #[doc = "! Note that the parser also has to take care of storing the semantic value of"]
-//     #[doc = "! the option somewhere."]
-//     #[doc = "!"]
-//     #[doc = "! Parameter option specifies the name(s) of the option."]
-//     #[doc = "! For example, \"ping,p\" adds the short option \"-p\" and its long form \"--ping\"."]
-//     #[doc = "! It is also possible to associate an option with a help level by adding \",@l\" to the option specification."]
-//     #[doc = "! Options with a level greater than zero are only shown if the argument to help is greater or equal to l."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] options object to register the option with"]
-//     #[doc = "! @param[in] group options are grouped into sections as given by this string"]
-//     #[doc = "! @param[in] option specifies the command line option"]
-//     #[doc = "! @param[in] description the description of the option"]
-//     #[doc = "! @param[in] parse callback to parse the value of the option"]
-//     #[doc = "! @param[in] data user data for the callback"]
-//     #[doc = "! @param[in] multi whether the option can appear multiple times on the command-line"]
-//     #[doc = "! @param[in] argument optional string to change the value name in the generated help output"]
-//     #[doc = "! @return whether the call was successful"]
-//     pub fn clingo_options_add(
-//         options: *mut clingo_options_t,
-//         group: *const ::std::os::raw::c_char,
-//         option: *const ::std::os::raw::c_char,
-//         description: *const ::std::os::raw::c_char,
-//         parse: ::std::option::Option<
-//             unsafe extern "C" fn(
-//                 value: *const ::std::os::raw::c_char,
-//                 data: *mut ::std::os::raw::c_void,
-//             ) -> bool,
-//         >,
-//         data: *mut ::std::os::raw::c_void,
-//         multi: bool,
-//         argument: *const ::std::os::raw::c_char,
-//     ) -> bool;
-// }
-// extern "C" {
-//     #[doc = "! Add an option that is a simple flag."]
-//     #[doc = "!"]
-//     #[doc = "! This function is similar to @ref clingo_options_add() but simpler because it only supports flags, which do not have values."]
-//     #[doc = "! If a flag is passed via the command-line the parameter target is set to true."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] options object to register the option with"]
-//     #[doc = "! @param[in] group options are grouped into sections as given by this string"]
-//     #[doc = "! @param[in] option specifies the command line option"]
-//     #[doc = "! @param[in] description the description of the option"]
-//     #[doc = "! @param[in] target boolean set to true if the flag is given on the command-line"]
-//     #[doc = "! @return whether the call was successful"]
-//     pub fn clingo_options_add_flag(
-//         options: *mut clingo_options_t,
-//         group: *const ::std::os::raw::c_char,
-//         option: *const ::std::os::raw::c_char,
-//         description: *const ::std::os::raw::c_char,
-//         target: *mut bool,
-//     ) -> bool;
-// }
+/// A boolean flag that is set by a command line option.
+///
+/// The flag is shared between its clones, so the value set while parsing the command line can
+/// be read later, e.g., in [`Application::main()`].
+///
+/// **See:** [`ClingoOptions::add_flag()`]
+#[derive(Debug, Clone, Default)]
+pub struct Flag(Rc<Cell<bool>>);
+impl Flag {
+    /// Create a flag with the given initial value.
+    pub fn new(value: bool) -> Flag {
+        Flag(Rc::new(Cell::new(value)))
+    }
+    /// Get the value of the flag.
+    pub fn get(&self) -> bool {
+        self.0.get()
+    }
+}
 
-// extern "C" {
-//     #[doc = "! Run clingo with a customized main function (similar to python and lua embedding)."]
-//     #[doc = "!"]
-//     #[doc = "! @param[in] application struct with callbacks to override default clingo functionality"]
-//     #[doc = "! @param[in] arguments command line arguments"]
-//     #[doc = "! @param[in] size number of arguments"]
-//     #[doc = "! @param[in] data user data to pass to callbacks in application"]
-//     #[doc = "! @return exit code to return from main function"]
-// pub fn clingo_mai<T: Application>(app:&mut T, arguments: Vec<String>) -> Result<i32,ClingoError> {
-//     let c_app = clingo_application{
-//         program_name: Some(<T>::unsafe_program_name::<T>),
-//         version: Some(<T>::unsafe_version::<T>),
-//         message_limit: Some(<T>::unsafe_message_limit::<T>),
-//         main: Some(<T>::unsafe_main::<T>),
-//         logger: Some(<T>::unsafe_logger::<T>),
-//         printer: Some(<T>::unsafe_printer::<T>),
-//         register_options: Some(<T>::unsafe_register_options::<T>),
-//         validate_options: Some(<T>::unsafe_validate_options::<T>)
-//     };
-//     let mut args = vec![];
-//     for arg in arguments {
-//         args.push(CString::new(arg)?);
-//     }
-//     // convert the strings to raw pointers
-//     let c_args = args
-//         .iter()
-//         .map(|arg| arg.as_ptr())
-//         .collect::<Vec<*const c_char>>();
-//     Ok(unsafe { clingo_main(&mut c_app, c_args.as_ptr(), arguments.len(), app as *mut c_void) } )
-// }
-//     pub fn clingo_main(
-//         application: *mut clingo_application_t,
-//         arguments: *const *const ::std::os::raw::c_char,
-//         size: usize,
-//         data: *mut ::std::os::raw::c_void,
-//     ) -> ::std::os::raw::c_int;
-// }
+type OptionParser = Box<dyn FnMut(&str) -> bool>;
+
+/// Storage for option parsers and flags that has to outlive the command line parsing.
+#[derive(Default)]
+struct OptionsData {
+    parsers: Vec<OptionParser>,
+    flags: Vec<Flag>,
+}
+
+/// Object to add command line options.
+///
+/// **See:** [`Application::register_options()`]
+pub struct ClingoOptions<'a> {
+    options: *mut clingo_options_t,
+    data: &'a mut OptionsData,
+}
+impl ClingoOptions<'_> {
+    /// Add an option that is processed with a custom parser.
+    ///
+    /// Note that the parser also has to take care of storing the semantic value of
+    /// the option somewhere.
+    ///
+    /// Parameter `option` specifies the name(s) of the option.
+    /// For example, `"ping,p"` adds the short option `-p` and its long form `--ping`.
+    /// It is also possible to associate an option with a help level by adding `",@l"` to the
+    /// option specification.
+    /// Options with a level greater than zero are only shown if the argument to help is greater
+    /// or equal to `l`.
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - options are grouped into sections as given by this string
+    /// * `option` - specifies the command line option
+    /// * `description` - the description of the option
+    /// * `parser` - callback to parse the value of the option, returns whether the value is valid
+    /// * `multi` - whether the option can appear multiple times on the command line
+    /// * `argument` - optional string to change the value name in the generated help output
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if an argument contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] or [`ErrorCode::BadAlloc`]
+    pub fn add<F: FnMut(&str) -> bool + 'static>(
+        &mut self,
+        group: &str,
+        option: &str,
+        description: &str,
+        parser: F,
+        multi: bool,
+        argument: Option<&str>,
+    ) -> Result<(), ClingoError> {
+        let group = CString::new(group)?;
+        let option = CString::new(option)?;
+        let description = CString::new(description)?;
+        let argument = argument.map(CString::new).transpose()?;
+        let argument = argument
+            .as_ref()
+            .map_or(std::ptr::null(), |argument| argument.as_ptr());
+        let mut parser = Box::new(parser);
+        let parser_ptr = &mut *parser as *mut F as *mut c_void;
+        if !unsafe {
+            clingo_options_add(
+                self.options,
+                group.as_ptr(),
+                option.as_ptr(),
+                description.as_ptr(),
+                Some(unsafe_option_parser::<F>),
+                parser_ptr,
+                multi,
+                argument,
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_options_add() failed",
+            ));
+        }
+        self.data.parsers.push(parser);
+        Ok(())
+    }
+    /// Add an option that is a simple flag.
+    ///
+    /// This function is similar to [`ClingoOptions::add()`] but simpler because it only
+    /// supports flags, which do not have values.
+    /// If a flag is passed via the command line the `target` is set to true.
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - options are grouped into sections as given by this string
+    /// * `option` - specifies the command line option
+    /// * `description` - the description of the option
+    /// * `target` - flag set to true if the flag is given on the command line
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::NulError`] - if an argument contains a nul byte
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] or [`ErrorCode::BadAlloc`]
+    pub fn add_flag(
+        &mut self,
+        group: &str,
+        option: &str,
+        description: &str,
+        target: &Flag,
+    ) -> Result<(), ClingoError> {
+        let group = CString::new(group)?;
+        let option = CString::new(option)?;
+        let description = CString::new(description)?;
+        if !unsafe {
+            clingo_options_add_flag(
+                self.options,
+                group.as_ptr(),
+                option.as_ptr(),
+                description.as_ptr(),
+                target.0.as_ptr(),
+            )
+        } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_options_add_flag() failed",
+            ));
+        }
+        // keep the flag alive until the command line is parsed
+        self.data.flags.push(target.clone());
+        Ok(())
+    }
+}
+unsafe extern "C" fn unsafe_option_parser<F: FnMut(&str) -> bool>(
+    value: *const c_char,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if value.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_option_parser() got a null pointer.",
+        );
+        return false;
+    }
+    let parser = &mut *(data as *mut F);
+    match CStr::from_ptr(value).to_str() {
+        Ok(value) => parser(value),
+        Err(_) => false,
+    }
+}
+
+/// The default printer of models passed to [`Application::print_model()`].
+#[derive(Debug)]
+pub struct DefaultModelPrinter {
+    printer: clingo_default_model_printer_t,
+    data: *mut c_void,
+}
+impl DefaultModelPrinter {
+    /// Print the model in clingo's default format.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`] or [`ErrorCode::BadAlloc`]
+    pub fn print(&mut self) -> Result<(), ClingoError> {
+        let printer = self.printer.ok_or(ClingoError::FFIError {
+            msg: "The default model printer is missing.",
+        })?;
+        if !unsafe { printer(self.data) } {
+            return Err(ClingoError::new_internal(
+                "Call to the default model printer failed",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// An application that customizes clingo's main function.
+///
+/// The defaults of the provided methods behave like clingo itself.
+///
+/// **Note:** clingo calls [`Application::log()`] and [`Application::print_model()`] while
+/// [`Application::main()`] is running, so these methods only get shared access to the
+/// application. Use interior mutability, e.g., [`Cell`] or [`RefCell`](std::cell::RefCell), to
+/// record state.
+///
+/// **See:** [`clingo_main()`]
+pub trait Application {
+    /// Get the name of the program.
+    fn program_name(&self) -> &str {
+        "clingo"
+    }
+    /// Get the version of the program.
+    fn version(&self) -> &str {
+        CStr::from_bytes_with_nul(CLINGO_VERSION)
+            .ok()
+            .and_then(|version| version.to_str().ok())
+            .unwrap_or("")
+    }
+    /// Get the maximum number of messages passed to [`Application::log()`].
+    fn message_limit(&self) -> u32 {
+        20
+    }
+    /// The main function of the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctl` - the control object of the application
+    /// * `files` - the files passed on the command line
+    fn main(&self, ctl: Control, files: &[&str]) -> Result<(), ClingoError>;
+    /// Log a message.
+    ///
+    /// The default implementation prints the message to stderr.
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - the warning code of the message
+    /// * `message` - the message
+    fn log(&self, code: Warning, message: &str) {
+        let _ = code;
+        eprintln!("{}", message);
+    }
+    /// Print a model.
+    ///
+    /// The default implementation uses clingo's default model printer.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - the model to print
+    /// * `printer` - clingo's default model printer
+    fn print_model(
+        &self,
+        model: &Model,
+        printer: &mut DefaultModelPrinter,
+    ) -> Result<(), ClingoError> {
+        let _ = model;
+        printer.print()
+    }
+    /// Register options of the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - object to register the options with
+    fn register_options(&mut self, options: &mut ClingoOptions) -> Result<(), ClingoError> {
+        let _ = options;
+        Ok(())
+    }
+    /// Validate the options of the application after the command line has been parsed.
+    fn validate_options(&mut self) -> Result<(), ClingoError> {
+        Ok(())
+    }
+}
+
+/// Data passed to the callbacks of [`clingo_main()`].
+struct ApplicationData<A: Application> {
+    app: *mut A,
+    // clingo stores the pointers to the program name and version
+    program_name: CString,
+    version: CString,
+    options: OptionsData,
+}
+
+/// Run clingo with a customized main function (similar to python and lua embedding).
+///
+/// # Arguments
+///
+/// * `app` - the application overriding clingo's default functionality
+/// * `arguments` - the command line arguments (without the program name)
+///
+/// **Returns** the exit code of clingo
+///
+/// # Errors
+///
+/// - [`ClingoError::NulError`] - if an argument, the program name, or the version contain a nul
+///   byte
+pub fn clingo_main<A: Application>(app: &mut A, arguments: &[&str]) -> Result<i32, ClingoError> {
+    let arguments = arguments
+        .iter()
+        .map(|argument| CString::new(*argument))
+        .collect::<Result<Vec<CString>, NulError>>()?;
+    let c_arguments = arguments
+        .iter()
+        .map(|argument| argument.as_ptr())
+        .collect::<Vec<*const c_char>>();
+    let mut data = ApplicationData {
+        program_name: CString::new(app.program_name())?,
+        version: CString::new(app.version())?,
+        app: app as *mut A,
+        options: OptionsData::default(),
+    };
+    let mut application = clingo_application {
+        program_name: Some(unsafe_application_program_name::<A>),
+        version: Some(unsafe_application_version::<A>),
+        message_limit: Some(unsafe_application_message_limit::<A>),
+        main: Some(unsafe_application_main::<A>),
+        logger: Some(unsafe_application_logger::<A>),
+        printer: Some(unsafe_application_printer::<A>),
+        register_options: Some(unsafe_application_register_options::<A>),
+        validate_options: Some(unsafe_application_validate_options::<A>),
+    };
+    Ok(unsafe {
+        clingo_sys::clingo_main(
+            &mut application,
+            c_arguments.as_ptr(),
+            c_arguments.len(),
+            &mut data as *mut ApplicationData<A> as *mut c_void,
+        )
+    })
+}
+unsafe extern "C" fn unsafe_application_program_name<A: Application>(
+    data: *mut c_void,
+) -> *const c_char {
+    let data = &*(data as *const ApplicationData<A>);
+    data.program_name.as_ptr()
+}
+unsafe extern "C" fn unsafe_application_version<A: Application>(
+    data: *mut c_void,
+) -> *const c_char {
+    let data = &*(data as *const ApplicationData<A>);
+    data.version.as_ptr()
+}
+unsafe extern "C" fn unsafe_application_message_limit<A: Application>(
+    data: *mut c_void,
+) -> std::os::raw::c_uint {
+    let data = &*(data as *const ApplicationData<A>);
+    (*data.app).message_limit()
+}
+unsafe extern "C" fn unsafe_application_main<A: Application>(
+    control: *mut clingo_control_t,
+    files: *const *const c_char,
+    size: usize,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if control.is_null() | (size > 0 && files.is_null()) | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_application_main() got a null pointer.",
+        );
+        return false;
+    }
+    let data = &*(data as *const ApplicationData<A>);
+    let files = slice_from_raw_parts(files, size)
+        .iter()
+        .map(|file| CStr::from_ptr(*file).to_str())
+        .collect::<Result<Vec<&str>, Utf8Error>>();
+    let files = match files {
+        Ok(files) => files,
+        Err(_) => {
+            set_internal_error(ErrorType::Runtime, "A file name is not valid UTF-8.");
+            return false;
+        }
+    };
+    // the control object belongs to clingo and must not be freed
+    let ctl = GenericControl {
+        ctl: NonNull::new_unchecked(control),
+        copied: true,
+        context: Box::new(DefaultCtx { non: defaults::Non }),
+    };
+    match (*data.app).main(ctl, &files) {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_application_logger<A: Application>(
+    code: clingo_warning_t,
+    message: *const c_char,
+    data: *mut c_void,
+) {
+    // check for null pointers
+    if message.is_null() | data.is_null() {
+        return;
+    }
+    let data = &*(data as *const ApplicationData<A>);
+    if let (Ok(code), Ok(message)) = (
+        Warning::try_from(code as u32),
+        CStr::from_ptr(message).to_str(),
+    ) {
+        (*data.app).log(code, message);
+    }
+}
+unsafe extern "C" fn unsafe_application_printer<A: Application>(
+    model: *const clingo_model_t,
+    printer: clingo_default_model_printer_t,
+    printer_data: *mut c_void,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if model.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_application_printer() got a null pointer.",
+        );
+        return false;
+    }
+    let data = &*(data as *const ApplicationData<A>);
+    let model = &*(model as *const Model);
+    let mut printer = DefaultModelPrinter {
+        printer,
+        data: printer_data,
+    };
+    match (*data.app).print_model(model, &mut printer) {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_application_register_options<A: Application>(
+    options: *mut clingo_options_t,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if options.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_application_register_options() got a null pointer.",
+        );
+        return false;
+    }
+    let data = &mut *(data as *mut ApplicationData<A>);
+    let mut options = ClingoOptions {
+        options,
+        data: &mut data.options,
+    };
+    match (*data.app).register_options(&mut options) {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_application_validate_options<A: Application>(
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_application_validate_options() got a null pointer.",
+        );
+        return false;
+    }
+    let data = &*(data as *const ApplicationData<A>);
+    match (*data.app).validate_options() {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
 /// Internalize a string.
 ///
 /// This functions takes a string as input and returns an equal unique string

@@ -75,6 +75,7 @@ The macro performs a conversion to snake case. This means the corresponding fact
 ## Examples
 
 ```sh
+echo "a. {b}." | cargo run --example=application -- 0
 cargo run --example=ast 0
 cargo run --example=backend 0
 cargo run --example=configuration
