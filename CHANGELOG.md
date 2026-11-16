@@ -34,6 +34,29 @@ All notable changes to this project will be documented in this file.
   - Backend::theory_atom() and TheoryAtomTarget
   - Backend::theory_atom_with_guard()
 - Implement Display for ErrorType and Warning
+- Fix Model::context(), which crashed (now takes `&mut self`)
+- PropagateControl::assignment_mut() takes `&mut self`
+- Fix dangling file names of locations created with Location::new() and Location::default()
+  - Location::new() returns a ClingoError
+- Fix Function::name(), which returned the whole function (now returns `Result<&str>`)
+- Fix TheoryAtom::guard(), which panicked (now returns `Result<Option<TheoryGuard>>`)
+- Implement TheoryAtom::elements() (now returns `Result<Vec<TheoryAtomElement>>`)
+- GenericControl::register_control_context() keeps the ownership of the control object
+- Default control objects no longer hide the functions of registered scripts
+  - Undefined external functions are reported by clingo instead of being ignored silently
+  - Add ControlCtx::has_function_handler()
+- Implement Ord for Symbol and Signature
+- Add Control::load()
+- Add ast::Node to access all attributes of AST nodes
+  - Make NodeType, Attribute and AttributeType public
+  - Add NodeType::Guard
+  - Implement TryFrom<Node> for Statement
+- Implement PartialEq, Eq, Hash, PartialOrd and Ord for AST nodes (ignoring locations)
+- Add Node::unpool(), Statement::unpool() and UnpoolType
+- Add ast::parse_files_with_statement_handler()
+- Add clingo_main() to write clingo applications
+  - Add Application, ClingoOptions, Flag and DefaultModelPrinter
+- Add register_script(), script_version() and Script
 
 ## v0.8.0
 
