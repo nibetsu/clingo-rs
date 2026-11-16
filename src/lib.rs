@@ -3465,9 +3465,8 @@ impl<'a> Backend<'a> {
     pub fn theory_term_string(&mut self, string: &str) -> Result<Id, ClingoError> {
         let string = CString::new(string)?;
         let mut term_id = 0;
-        if !unsafe {
-            clingo_backend_theory_term_string(self.theref, string.as_ptr(), &mut term_id)
-        } {
+        if !unsafe { clingo_backend_theory_term_string(self.theref, string.as_ptr(), &mut term_id) }
+        {
             return Err(ClingoError::new_internal(
                 "Call to clingo_backend_theory_term_string() failed",
             ));
@@ -3522,7 +3521,11 @@ impl<'a> Backend<'a> {
     ///
     /// - [`ClingoError::NulError`] - if `name` contains a nul byte
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
-    pub fn theory_term_function(&mut self, name: &str, arguments: &[Id]) -> Result<Id, ClingoError> {
+    pub fn theory_term_function(
+        &mut self,
+        name: &str,
+        arguments: &[Id],
+    ) -> Result<Id, ClingoError> {
         let name = CString::new(name)?;
         let mut term_id = 0;
         if !unsafe {

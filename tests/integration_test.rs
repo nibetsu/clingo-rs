@@ -325,14 +325,9 @@ fn ast_head_literal() {
         format!("{}", hlit),
         "&tset { test: toast } theory_operator test"
     );
-    
-    let ta_term : Term = tatom.term();
-    assert_eq!(
-        format!("{}", ta_term),
-        "tset"
-    );
 
-    
+    let ta_term: Term = tatom.term();
+    assert_eq!(format!("{}", ta_term), "tset");
 }
 #[test]
 fn ast_body_literal() {
@@ -766,10 +761,7 @@ fn model_priority() {
 }
 #[test]
 fn solve_handle_last() {
-    let ctl = ground_base(
-        vec![],
-        "1 {a; b; c}. #minimize { 1,a: a; 2,b: b; 3,c: c }.",
-    );
+    let ctl = ground_base(vec![], "1 {a; b; c}. #minimize { 1,a: a; 2,b: b; 3,c: c }.");
     let mut handle = ctl.solve(SolveMode::empty(), &[]).unwrap();
     assert!(handle.get().unwrap().contains(SolveResult::SATISFIABLE));
     let model = handle.last().unwrap().expect("Expected a last model.");
@@ -1143,7 +1135,10 @@ fn ast_node_number_and_types() {
 
         let mut literal = rule.get_ast_at(Attribute::Body, 0).unwrap();
         assert_eq!(literal.node_type().unwrap(), NodeType::Literal);
-        assert_eq!(literal.get_number(Attribute::Sign).unwrap(), Sign::NoSign as i32);
+        assert_eq!(
+            literal.get_number(Attribute::Sign).unwrap(),
+            Sign::NoSign as i32
+        );
         literal
             .set_number(Attribute::Sign, Sign::Negation as i32)
             .unwrap();
@@ -1268,7 +1263,10 @@ fn ast_node_string_array() {
             AttributeType::StringArray
         );
         assert_eq!(unparsed.string_array_size(Attribute::Operators).unwrap(), 1);
-        assert_eq!(unparsed.get_string_at(Attribute::Operators, 0).unwrap(), "-");
+        assert_eq!(
+            unparsed.get_string_at(Attribute::Operators, 0).unwrap(),
+            "-"
+        );
 
         unparsed
             .set_string_at(Attribute::Operators, 0, "~")
@@ -1277,7 +1275,10 @@ fn ast_node_string_array() {
             .insert_string_at(Attribute::Operators, 1, "+")
             .unwrap();
         assert_eq!(unparsed.string_array_size(Attribute::Operators).unwrap(), 2);
-        assert_eq!(unparsed.get_string_at(Attribute::Operators, 1).unwrap(), "+");
+        assert_eq!(
+            unparsed.get_string_at(Attribute::Operators, 1).unwrap(),
+            "+"
+        );
         assert_eq!(rule.to_string().unwrap(), "&a { (~ + x) }.");
         unparsed.delete_string_at(Attribute::Operators, 0).unwrap();
         assert_eq!(rule.to_string().unwrap(), "&a { (+ x) }.");
@@ -1420,11 +1421,19 @@ fn ast_parse_files() {
     statements.sort();
     assert_eq!(
         statements,
-        ["#program base.", "#program base.", "% comment", "a :- b.", "b."]
+        [
+            "#program base.",
+            "#program base.",
+            "% comment",
+            "a :- b.",
+            "b."
+        ]
     );
 
     let mut collector = StatementCollector::default();
-    assert!(parse_files_with_statement_handler(&[path1.to_str().unwrap()], &mut collector).is_err());
+    assert!(
+        parse_files_with_statement_handler(&[path1.to_str().unwrap()], &mut collector).is_err()
+    );
     assert!(parse_files_with_statement_handler(&["a\0"], &mut collector).is_err());
 }
 #[test]

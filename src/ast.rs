@@ -3,9 +3,9 @@ use crate::{
     GenericControl, Symbol,
 };
 
+use crate::ast_internals::Ast;
 use crate::ast_internals::Body;
 pub use crate::ast_internals::{Attribute, AttributeType, NodeType, UnpoolType};
-use crate::ast_internals::Ast;
 use clingo_sys::*;
 use std::ffi::CStr;
 use std::ffi::NulError;
@@ -1083,7 +1083,11 @@ impl<'a> Node<'a> {
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::Runtime`](crate::ErrorCode::Runtime)
     ///   if the index is out of range
-    pub fn delete_string_at(&mut self, attribute: Attribute, index: usize) -> Result<(), ClingoError> {
+    pub fn delete_string_at(
+        &mut self,
+        attribute: Attribute,
+        index: usize,
+    ) -> Result<(), ClingoError> {
         self.ast.delete_attribute_string_at(attribute, index)
     }
     /// Get the size of an attribute of type [`AttributeType::AstArray`].
@@ -1126,7 +1130,8 @@ impl<'a> Node<'a> {
         index: usize,
         value: &Node,
     ) -> Result<(), ClingoError> {
-        self.ast.insert_attribute_ast_at(attribute, index, &value.ast)
+        self.ast
+            .insert_attribute_ast_at(attribute, index, &value.ast)
     }
     /// Remove an element from an attribute of type [`AttributeType::AstArray`] at the given
     /// index.

@@ -1,13 +1,13 @@
 use crate::ast::{BodyLiteral, Head, Location, Term};
+use crate::{set_internal_error, ErrorType};
 use crate::{ClingoError, Symbol};
 use clingo_sys::*;
-use std::marker::PhantomData;
-use std::os::raw::c_void;
-use std::ptr::NonNull;
-use crate::{set_internal_error, ErrorType};
 use std::cmp::Ordering;
 use std::ffi::{CStr, CString};
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::os::raw::c_void;
+use std::ptr::NonNull;
 
 #[derive(Debug, Clone)]
 pub struct Body<'a>(ASTArray<'a>);
@@ -60,10 +60,7 @@ impl<'a> Iterator for ASTArray<'a> {
             return None;
         }
 
-        if let Ok(ast) = self
-            .ast
-            .get_attribute_ast_at(Attribute::Body, self.index)
-        {
+        if let Ok(ast) = self.ast.get_attribute_ast_at(Attribute::Body, self.index) {
             self.index += 1;
             Some(ast)
         } else {
@@ -183,7 +180,9 @@ impl NodeType {
                 Ok(NodeType::TheoryUnparsedTerm)
             }
             clingo_ast_type_e_clingo_ast_type_theory_guard => Ok(NodeType::TheoryGuard),
-            clingo_ast_type_e_clingo_ast_type_theory_atom_element => Ok(NodeType::TheoryAtomElement),
+            clingo_ast_type_e_clingo_ast_type_theory_atom_element => {
+                Ok(NodeType::TheoryAtomElement)
+            }
             clingo_ast_type_e_clingo_ast_type_theory_atom => Ok(NodeType::TheoryAtom),
             clingo_ast_type_e_clingo_ast_type_literal => Ok(NodeType::Literal),
             clingo_ast_type_e_clingo_ast_type_theory_operator_definition => {
@@ -552,7 +551,10 @@ impl<'a> Ast<'a> {
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    pub(crate) fn get_attribute_type(&self, attribute: Attribute) -> Result<AttributeType, ClingoError> {
+    pub(crate) fn get_attribute_type(
+        &self,
+        attribute: Attribute,
+    ) -> Result<AttributeType, ClingoError> {
         let mut attribute_type = 0;
         if !unsafe {
             clingo_ast_attribute_type(self.ptr.as_ptr(), attribute as i32, &mut attribute_type)
@@ -589,8 +591,7 @@ impl<'a> Ast<'a> {
         attribute: Attribute,
         value: i32,
     ) -> Result<(), ClingoError> {
-        if !unsafe { clingo_ast_attribute_set_number(self.ptr.as_ptr(), attribute as i32, value) }
-        {
+        if !unsafe { clingo_ast_attribute_set_number(self.ptr.as_ptr(), attribute as i32, value) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_ast_attribute_set_number() failed.",
             ));
@@ -650,9 +651,8 @@ impl<'a> Ast<'a> {
         attribute: Attribute,
         value: Symbol,
     ) -> Result<(), ClingoError> {
-        if !unsafe {
-            clingo_ast_attribute_set_symbol(self.ptr.as_ptr(), attribute as i32, value.0)
-        } {
+        if !unsafe { clingo_ast_attribute_set_symbol(self.ptr.as_ptr(), attribute as i32, value.0) }
+        {
             return Err(ClingoError::new_internal(
                 "Call to clingo_ast_attribute_set_symbol() failed.",
             ));
@@ -740,7 +740,11 @@ impl<'a> Ast<'a> {
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    pub(crate) fn set_attribute_ast(&self, attribute: Attribute, value: &Ast) -> Result<(), ClingoError> {
+    pub(crate) fn set_attribute_ast(
+        &self,
+        attribute: Attribute,
+        value: &Ast,
+    ) -> Result<(), ClingoError> {
         if !unsafe {
             clingo_ast_attribute_set_ast(self.ptr.as_ptr(), attribute as i32, value.ptr.as_ptr())
         } {
@@ -924,7 +928,10 @@ impl<'a> Ast<'a> {
     ///
     /// might set one of the following error codes:
     /// - ::clingo_error_runtime
-    pub(crate) fn size_attribute_ast_array(&self, attribute: Attribute) -> Result<usize, ClingoError> {
+    pub(crate) fn size_attribute_ast_array(
+        &self,
+        attribute: Attribute,
+    ) -> Result<usize, ClingoError> {
         let mut size = 0;
         if !unsafe {
             clingo_ast_attribute_size_ast_array(self.ptr.as_ptr(), attribute as i32, &mut size)
@@ -1083,7 +1090,9 @@ fn check_index(index: usize, size: usize) -> Result<(), ClingoError> {
         return Ok(());
     }
     set_internal_error(ErrorType::Runtime, "index out of range");
-    Err(ClingoError::new_internal("AST attribute index out of range."))
+    Err(ClingoError::new_internal(
+        "AST attribute index out of range.",
+    ))
 }
 
 /// Enum to configure unpooling.
@@ -1096,4 +1105,3 @@ pub enum UnpoolType {
     /// To unpool everything.
     All = clingo_ast_unpool_type_e_clingo_ast_unpool_type_all as isize,
 }
-
