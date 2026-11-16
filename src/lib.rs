@@ -1859,6 +1859,13 @@ pub trait ControlCtx {
     fn observer(&mut self) -> (&mut Self::O, bool);
     /// Return a function handler
     fn function_handler(&mut self) -> &mut Self::F;
+    /// Return whether the function handler is used to evaluate external functions.
+    ///
+    /// If false is returned, external functions are evaluated by the scripts registered with
+    /// [`register_script()`] instead.
+    fn has_function_handler(&self) -> bool {
+        true
+    }
 }
 
 /// Default context for the Control.
@@ -1885,6 +1892,9 @@ impl ControlCtx for DefaultCtx {
     }
     fn function_handler(&mut self) -> &mut Self::F {
         &mut self.non
+    }
+    fn has_function_handler(&self) -> bool {
+        false
     }
 }
 
@@ -1926,14 +1936,23 @@ impl<C: ControlCtx> GenericControl<C> {
             .iter()
             .map(|arg| arg.part)
             .collect::<Vec<clingo_part>>();
-        let function_handler = self.context.function_handler();
+        // without a ground callback clingo evaluates external functions with registered scripts
+        let (ground_callback, function_handler) = if self.context.has_function_handler() {
+            let function_handler = self.context.function_handler();
+            (
+                Some(unsafe_ground_callback::<C::F> as GroundCallback),
+                function_handler as *mut C::F as *mut c_void,
+            )
+        } else {
+            (None, std::ptr::null_mut())
+        };
         if !unsafe {
             clingo_control_ground(
                 self.ctl.as_ptr(),
                 parts.as_ptr(),
                 parts_size,
-                Some(unsafe_ground_callback::<C::F> as GroundCallback),
-                function_handler as *mut C::F as *mut c_void,
+                ground_callback,
+                function_handler,
             )
         } {
             return Err(ClingoError::new_internal(
@@ -6327,6 +6346,248 @@ unsafe extern "C" fn unsafe_application_validate_options<A: Application>(
             set_callback_error(&error);
             false
         }
+    }
+}
+/// A custom scripting language to run functions during grounding.
+///
+/// Code in `#script (name) ... #end.` blocks of a logic program is passed to the script
+/// registered with the same name, and external functions of form `@f(...)` are called if no
+/// function handler is registered with the control object.
+///
+/// **Note:** Scripts are registered globally and can be used by several control objects at the
+/// same time. Moreover, clingo calls the other methods while [`Script::main()`] is running. That
+/// is why the methods only get shared access to the script. Use interior mutability, e.g.,
+/// [`Mutex`](std::sync::Mutex), to record state.
+///
+/// **See:** [`register_script()`]
+pub trait Script {
+    /// Evaluate the given source code.
+    ///
+    /// # Arguments
+    ///
+    /// * `location` - the location in the logic program of the source code
+    /// * `code` - the code to evaluate
+    fn execute(&self, location: &ast::Location, code: &str) -> Result<(), ClingoError>;
+    /// Call the function with the given name and arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `location` - the location in the logic program of the function call
+    /// * `name` - the name of the function
+    /// * `arguments` - the arguments to the function
+    ///
+    /// **Returns** the symbols the function call evaluates to
+    fn call(
+        &self,
+        location: &ast::Location,
+        name: &str,
+        arguments: &[Symbol],
+    ) -> Result<Vec<Symbol>, ClingoError>;
+    /// Check if the given function is callable.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - the name of the function
+    fn callable(&self, name: &str) -> Result<bool, ClingoError>;
+    /// Run the main function.
+    ///
+    /// clingo calls this function instead of its default main function if the script is
+    /// callable with name `main`.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctl` - the control object to pass to the main function
+    fn main(&self, ctl: Control) -> Result<(), ClingoError>;
+}
+
+/// Add a custom scripting language to clingo.
+///
+/// # Arguments
+///
+/// * `name` - the name of the scripting language
+/// * `script` - the implementation of the scripting language
+/// * `version` - the version of the scripting language
+///
+/// # Errors
+///
+/// - [`ClingoError::NulError`] - if `name` or `version` contain a nul byte
+/// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+pub fn register_script<S: Script + Send + Sync + 'static>(
+    name: &str,
+    script: S,
+    version: &str,
+) -> Result<(), ClingoError> {
+    let name = CString::new(name)?;
+    let c_script = clingo_script {
+        execute: Some(unsafe_script_execute::<S>),
+        call: Some(unsafe_script_call::<S>),
+        callable: Some(unsafe_script_callable::<S>),
+        main: Some(unsafe_script_main::<S>),
+        free: Some(unsafe_script_free::<S>),
+        // clingo stores the pointer to the version
+        version: internalize_string(version)?,
+    };
+    // clingo owns the script from now on and frees it with the free callback
+    let data = Box::into_raw(Box::new(script));
+    if !unsafe { clingo_register_script(name.as_ptr(), &c_script, data as *mut c_void) } {
+        // the script is leaked because it is unknown whether clingo already freed it
+        return Err(ClingoError::new_internal(
+            "Call to clingo_register_script() failed",
+        ));
+    }
+    Ok(())
+}
+
+/// Get the version of a registered scripting language.
+///
+/// # Arguments
+///
+/// * `name` - the name of the scripting language
+///
+/// **Returns** the version or `None` if no scripting language with the name is registered
+///
+/// # Errors
+///
+/// - [`ClingoError::NulError`] - if `name` contains a nul byte
+/// - [`ClingoError::Utf8Error`]
+pub fn script_version(name: &str) -> Result<Option<&'static str>, ClingoError> {
+    let name = CString::new(name)?;
+    let version = unsafe { clingo_script_version(name.as_ptr()) };
+    if version.is_null() {
+        return Ok(None);
+    }
+    Ok(Some(unsafe { CStr::from_ptr(version) }.to_str()?))
+}
+unsafe extern "C" fn unsafe_script_execute<S: Script>(
+    location: *const clingo_location_t,
+    code: *const c_char,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if location.is_null() | code.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_script_execute() got a null pointer.",
+        );
+        return false;
+    }
+    let script = &*(data as *const S);
+    let location = &*(location as *const ast::Location);
+    let result = CStr::from_ptr(code)
+        .to_str()
+        .map_err(ClingoError::from)
+        .and_then(|code| script.execute(location, code));
+    match result {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn unsafe_script_call<S: Script>(
+    location: *const clingo_location_t,
+    name: *const c_char,
+    arguments: *const clingo_symbol_t,
+    arguments_size: usize,
+    symbol_callback: clingo_symbol_callback_t,
+    symbol_callback_data: *mut c_void,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if location.is_null()
+        | name.is_null()
+        | (arguments_size > 0 && arguments.is_null())
+        | data.is_null()
+    {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_script_call() got a null pointer.",
+        );
+        return false;
+    }
+    let script = &*(data as *const S);
+    let location = &*(location as *const ast::Location);
+    let arguments = slice_from_raw_parts(arguments as *const Symbol, arguments_size);
+    let result = CStr::from_ptr(name)
+        .to_str()
+        .map_err(ClingoError::from)
+        .and_then(|name| script.call(location, name, arguments));
+    match result {
+        Ok(symbols) => match symbol_callback {
+            Some(symbol_callback) => symbol_callback(
+                symbols.as_ptr() as *const clingo_symbol_t,
+                symbols.len(),
+                symbol_callback_data,
+            ),
+            None => true,
+        },
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_script_callable<S: Script>(
+    name: *const c_char,
+    result: *mut bool,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if name.is_null() | result.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_script_callable() got a null pointer.",
+        );
+        return false;
+    }
+    let script = &*(data as *const S);
+    let callable = CStr::from_ptr(name)
+        .to_str()
+        .map_err(ClingoError::from)
+        .and_then(|name| script.callable(name));
+    match callable {
+        Ok(callable) => {
+            *result = callable;
+            true
+        }
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_script_main<S: Script>(
+    control: *mut clingo_control_t,
+    data: *mut c_void,
+) -> bool {
+    // check for null pointers
+    if control.is_null() | data.is_null() {
+        set_internal_error(
+            ErrorType::Runtime,
+            "unsafe_script_main() got a null pointer.",
+        );
+        return false;
+    }
+    let script = &*(data as *const S);
+    // the control object belongs to clingo and must not be freed
+    let ctl = GenericControl {
+        ctl: NonNull::new_unchecked(control),
+        copied: true,
+        context: Box::new(DefaultCtx { non: defaults::Non }),
+    };
+    match script.main(ctl) {
+        Ok(()) => true,
+        Err(error) => {
+            set_callback_error(&error);
+            false
+        }
+    }
+}
+unsafe extern "C" fn unsafe_script_free<S: Script>(data: *mut c_void) {
+    if !data.is_null() {
+        drop(Box::from_raw(data as *mut S));
     }
 }
 /// Internalize a string.
