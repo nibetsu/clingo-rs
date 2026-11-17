@@ -749,3 +749,46 @@ fn add_clause(clause_type: ClauseType, m1: usize, m2: usize) {
     let (models, _) = solve(ctl).unwrap();
     assert_eq!(models.len(), m2);
 }
+
+struct TestDecide<const D: bool> {
+    calls: Arc<AtomicUsize>,
+}
+impl<const D: bool> Propagator for TestDecide<D> {
+    const DECIDE: bool = D;
+    fn decide(
+        &self,
+        _thread_id: Id,
+        _assignment: &Assignment,
+        _fallback: SolverLiteral,
+        _decision: &mut SolverLiteral,
+    ) -> bool {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        true
+    }
+}
+
+// returns how often decide was called while enumerating all models
+fn decide_calls<const D: bool>() -> usize {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let ctrl_ctx = CtrlCtx {
+        non: defaults::Non,
+        propagator: TestDecide::<D> {
+            calls: calls.clone(),
+        },
+    };
+    let mut ctl = control_with_context(vec!["0".into()], ctrl_ctx).unwrap();
+    ctl.add("base", &[], "{a;b;c}.")
+        .expect("Failed to add a logic program.");
+    let parts = vec![Part::new("base", vec![]).unwrap()];
+    ctl.ground(&parts)
+        .expect("Failed to ground a logic program.");
+    let (models, _) = solve(ctl).unwrap();
+    assert_eq!(models.len(), 8);
+    calls.load(Ordering::SeqCst)
+}
+
+#[test]
+fn decide_propagator() {
+    assert!(decide_calls::<true>() > 0);
+    assert_eq!(decide_calls::<false>(), 0);
+}

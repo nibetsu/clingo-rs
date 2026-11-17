@@ -1614,6 +1614,12 @@ impl Part {
 /// Registering the propagator as sequential does not give exclusive access:
 /// clingo releases its lock while functions of [`PropagateControl`] are called.
 pub trait Propagator: Sync {
+    /// Whether [`decide()`][Propagator::decide()] is registered with clingo.
+    ///
+    /// Set this to `true` when implementing [`decide()`][Propagator::decide()].
+    /// Otherwise, clingo never calls it, which spares a call on every decision of the solver.
+    const DECIDE: bool = false;
+
     /// This function is called once before each solving step.
     /// It is used to map relevant program literals to solver literals, add watches for solver
     /// literals, and initialize the data structures used during propagation.
@@ -1727,6 +1733,8 @@ pub trait Propagator: Sync {
     /// In case multiple propagators are registered,
     /// this function can return 0 to let a propagator registered later make a decision.
     /// If all propagators return 0, then the fallback literal is
+    ///
+    /// **Note:** This function is only called if [`Propagator::DECIDE`] is `true`.
     ///
     /// # Arguments
     ///
@@ -2366,7 +2374,11 @@ impl<C: ControlCtx> GenericControl<C> {
             propagate: Some(unsafe_propagate::<C::P>),
             undo: Some(unsafe_undo::<C::P>),
             check: Some(unsafe_check::<C::P>),
-            decide: Some(unsafe_decide::<C::P>),
+            decide: if C::P::DECIDE {
+                Some(unsafe_decide::<C::P>)
+            } else {
+                None
+            },
         };
         if !unsafe {
             clingo_control_register_propagator(
