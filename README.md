@@ -43,6 +43,11 @@ follows.
 clingo = { version = "0.9.0", features = ["static-linking"] }
 ```
 
+With static linking, `GenericControl::clasp_facade()` gives low-level access to clasp, the solver
+used by clingo.
+See the [clingo-sys Readme](https://github.com/potassco/clingo-sys#readme) on how to compile your
+own C++ code against clasp.
+
 ### Using `derive` macro
 
 The crate provides a derive macro to help ease the use of rust data types as facts.

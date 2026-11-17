@@ -57,6 +57,11 @@ All notable changes to this project will be documented in this file.
 - Add clingo_main() to write clingo applications
   - Add Application, ClingoOptions, Flag and DefaultModelPrinter
 - Add register_script(), script_version() and Script
+- Fix undefined behavior of propagators when solving with multiple threads
+  - Propagator::propagate(), undo(), check() and decide() take `&self` and Propagator requires Sync
+  - Propagator::undo() receives `&PropagateControl`
+- Add Propagator::DECIDE; Propagator::decide() is only called if it is true
+- Add GenericControl::clasp_facade() and ClaspFacade (requires the static-linking feature)
 
 ## v0.8.0
 
