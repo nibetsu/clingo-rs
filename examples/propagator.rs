@@ -1,7 +1,6 @@
 use clingo::*;
-use std::cell::RefCell;
 use std::env;
-use std::rc::Rc;
+use std::sync::Mutex;
 
 fn print_model(model: &Model) {
     // retrieve the symbols in the model
@@ -61,7 +60,7 @@ struct PropagatorT {
     // (solver literal -> hole number or zero)
     pigeons: Vec<i32>,
     // array of states
-    states: Vec<Rc<RefCell<StateT>>>,
+    states: Vec<Mutex<StateT>>,
 }
 impl Propagator for PropagatorT {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
@@ -87,9 +86,10 @@ impl Propagator for PropagatorT {
             return true;
         }
 
-        let s1_holes: Vec<Option<SolverLiteral>> = vec![];
-        let state1 = Rc::new(RefCell::new(StateT { holes: s1_holes }));
-        self.states = vec![state1];
+        // allocate one state per solver thread
+        self.states = (0..threads)
+            .map(|_| Mutex::new(StateT { holes: vec![] }))
+            .collect();
 
         // create place/2 signature to filter symbolic atoms with
         let sig = Signature::new("place", 2, true).unwrap();
@@ -148,18 +148,18 @@ impl Propagator for PropagatorT {
         }
 
         // initialize the per solver thread state information
-        for state in self.states.iter().take(threads) {
+        for state in self.states.iter_mut() {
             // initially no pigeons are assigned to any holes
             // so the hole -> literal mapping is initialized with zero
             // which is not a valid literal
-            state.borrow_mut().holes = vec![None; holes as usize];
+            state.get_mut().unwrap().holes = vec![None; holes as usize];
         }
         true
     }
 
-    fn propagate(&mut self, control: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
+    fn propagate(&self, control: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
         // get the thread specific state
-        let mut state = self.states[control.thread_id() as usize].borrow_mut();
+        let mut state = self.states[control.thread_id() as usize].lock().unwrap();
 
         // apply and check the pigeon assignments done by the solver
         for &lit in changes.iter() {
@@ -197,9 +197,9 @@ impl Propagator for PropagatorT {
         true
     }
 
-    fn undo(&mut self, control: &mut PropagateControl, changes: &[SolverLiteral]) {
+    fn undo(&self, control: &PropagateControl, changes: &[SolverLiteral]) {
         // get the thread specific state
-        let mut state = self.states[control.thread_id() as usize].borrow_mut();
+        let mut state = self.states[control.thread_id() as usize].lock().unwrap();
 
         // undo the assignments made in propagate
         for &lit in changes.iter() {

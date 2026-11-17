@@ -1598,7 +1598,22 @@ impl Part {
 /// An instance of this trait has to be registered with a solver to implement a custom propagator.
 ///
 /// Not all functions have to be implemented, there exist default implementations.
-pub trait Propagator {
+///
+/// # Threads
+///
+/// When solving with multiple threads, clingo calls [`propagate()`][Propagator::propagate()],
+/// [`undo()`][Propagator::undo()], [`check()`][Propagator::check()] and
+/// [`decide()`][Propagator::decide()] concurrently from the solver threads.
+/// Therefore, these functions take `&self` and the propagator has to be [`Sync`].
+/// Calls belonging to the same solver thread never overlap.
+/// State that depends on the assignment of a solver thread is best kept per thread, for example
+/// in a `Vec<Mutex<State>>` that [`init()`][Propagator::init()] sizes using
+/// [`PropagateInit::number_of_threads()`] and that is indexed with
+/// [`PropagateControl::thread_id()`].
+///
+/// Registering the propagator as sequential does not give exclusive access:
+/// clingo releases its lock while functions of [`PropagateControl`] are called.
+pub trait Propagator: Sync {
     /// This function is called once before each solving step.
     /// It is used to map relevant program literals to solver literals, add watches for solver
     /// literals, and initialize the data structures used during propagation.
@@ -1670,7 +1685,7 @@ pub trait Propagator {
     /// * `changes` - the change set
     ///
     /// **Returns** whether the call was successful
-    fn propagate(&mut self, _control: &mut PropagateControl, _changes: &[SolverLiteral]) -> bool {
+    fn propagate(&self, _control: &mut PropagateControl, _changes: &[SolverLiteral]) -> bool {
         true
     }
     /// Called whenever a solver undoes assignments to watched solver literals.
@@ -1685,7 +1700,7 @@ pub trait Propagator {
     /// * `changes` - the change set
     ///
     /// **Returns** whether the call was successful
-    fn undo(&mut self, _control: &mut PropagateControl, _changes: &[SolverLiteral]) {}
+    fn undo(&self, _control: &PropagateControl, _changes: &[SolverLiteral]) {}
 
     /// This function is similar to
     /// [`PropagateControl::propagate()`] but is only
@@ -1702,7 +1717,7 @@ pub trait Propagator {
     /// * `control` - control object for the target solver
     ///
     /// **Returns** whether the call was successful
-    fn check(&mut self, _control: &mut PropagateControl) -> bool {
+    fn check(&self, _control: &mut PropagateControl) -> bool {
         true
     }
     /// This function allows a propagator to implement domain-specific heuristics.
@@ -1722,7 +1737,7 @@ pub trait Propagator {
     ///
     /// **Returns** whether the call was successful
     fn decide(
-        &mut self,
+        &self,
         _thread_id: Id,
         _assignment: &Assignment,
         _fallback: SolverLiteral,
@@ -1758,7 +1773,7 @@ unsafe extern "C" fn unsafe_propagate<T: Propagator>(
     }
     let control = &mut *(control as *mut PropagateControl);
     let changes = slice_from_raw_parts(changes as *const SolverLiteral, size);
-    let propagator = &mut *(propagator as *mut T);
+    let propagator = &*(propagator as *const T);
 
     propagator.propagate(control, changes)
 }
@@ -1773,9 +1788,9 @@ unsafe extern "C" fn unsafe_undo<T: Propagator>(
         set_internal_error(ErrorType::Runtime, "unsafe_undo() got a null pointer.");
         return;
     }
-    let control = &mut *(control as *mut PropagateControl);
+    let control = &*(control as *const PropagateControl);
     let changes = slice_from_raw_parts(changes as *const SolverLiteral, size);
-    let propagator = &mut *(propagator as *mut T);
+    let propagator = &*(propagator as *const T);
 
     propagator.undo(control, changes)
 }
@@ -1789,7 +1804,7 @@ unsafe extern "C" fn unsafe_check<T: Propagator>(
         return false;
     }
     let control = &mut *(control as *mut PropagateControl);
-    let propagator = &mut *(propagator as *mut T);
+    let propagator = &*(propagator as *const T);
 
     propagator.check(control)
 }
@@ -1807,7 +1822,7 @@ unsafe extern "C" fn unsafe_decide<T: Propagator>(
     }
     let assignment = &*(assignment as *const Assignment);
     let fallback = SolverLiteral(fallback);
-    let propagator = &mut *(propagator as *mut T);
+    let propagator = &*(propagator as *const T);
     let decision = &mut *(decision as *mut SolverLiteral);
 
     propagator.decide(Id(thread_id), assignment, fallback, decision)
@@ -1852,6 +1867,8 @@ pub trait ControlCtx {
     ///
     /// If the sequential flag is true, the propagator is called
     /// sequentially when solving with multiple threads.
+    /// Note that clingo releases the lock while functions of [`PropagateControl`] are called,
+    /// see [`Propagator`].
     fn propagator(&mut self) -> (&mut Self::P, bool);
     /// Return a program observer and boolean flag for replace
     ///

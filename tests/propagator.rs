@@ -1,6 +1,7 @@
 use clingo::*;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use test_case::test_case;
 
 #[derive(Debug)]
@@ -47,7 +48,7 @@ struct PigeonPropagator {
     // (solver literal -> hole number or zero)
     pigeons: Vec<i32>,
     // array of states
-    states: Vec<Rc<RefCell<StateT>>>,
+    states: Vec<Mutex<StateT>>,
 }
 
 impl Propagator for PigeonPropagator {
@@ -74,9 +75,10 @@ impl Propagator for PigeonPropagator {
             return true;
         }
 
-        let s1_holes: Vec<Option<SolverLiteral>> = vec![];
-        let state1 = Rc::new(RefCell::new(StateT { holes: s1_holes }));
-        self.states = vec![state1];
+        // allocate one state per solver thread
+        self.states = (0..threads)
+            .map(|_| Mutex::new(StateT { holes: vec![] }))
+            .collect();
 
         // create place/2 signature to filter symbolic atoms with
         let sig = Signature::new("place", 2, true).unwrap();
@@ -135,18 +137,18 @@ impl Propagator for PigeonPropagator {
         }
 
         // initialize the per solver thread state information
-        for state in self.states.iter().take(threads) {
+        for state in self.states.iter_mut() {
             // initially no pigeons are assigned to any holes
             // so the hole -> literal mapping is initialized with zero
             // which is not a valid literal
-            (**state).borrow_mut().holes = vec![None; holes as usize];
+            state.get_mut().unwrap().holes = vec![None; holes as usize];
         }
         true
     }
 
-    fn propagate(&mut self, control: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
+    fn propagate(&self, control: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
         // get the thread specific state
-        let mut state = (*self.states[control.thread_id() as usize]).borrow_mut();
+        let mut state = self.states[control.thread_id() as usize].lock().unwrap();
 
         // apply and check the pigeon assignments done by the solver
         for &lit in changes.iter() {
@@ -184,9 +186,9 @@ impl Propagator for PigeonPropagator {
         true
     }
 
-    fn undo(&mut self, control: &mut PropagateControl, changes: &[SolverLiteral]) {
+    fn undo(&self, control: &PropagateControl, changes: &[SolverLiteral]) {
         // get the thread specific state
-        let mut state = (*self.states[control.thread_id() as usize]).borrow_mut();
+        let mut state = self.states[control.thread_id() as usize].lock().unwrap();
 
         // undo the assignments made in propagate
         for &lit in changes.iter() {
@@ -286,7 +288,7 @@ struct TestAssignment {
     a: Option<SolverLiteral>,
     b: Option<SolverLiteral>,
     c: Option<SolverLiteral>,
-    count: usize,
+    count: AtomicUsize,
 }
 impl Propagator for TestAssignment {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
@@ -325,9 +327,9 @@ impl Propagator for TestAssignment {
         init.add_watch(self.b.unwrap()).unwrap();
         true
     }
-    fn propagate(&mut self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
+    fn propagate(&self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
         let ass = ctl.assignment().unwrap();
-        self.count += changes.len();
+        let count = self.count.fetch_add(changes.len(), Ordering::SeqCst) + changes.len();
         let a_ = self.a.unwrap();
         let b_ = self.b.unwrap();
         let c_ = self.c.unwrap();
@@ -340,7 +342,7 @@ impl Propagator for TestAssignment {
         // REQUIRE(!ass.has_literal(1000));
         let decision = ass.decision(ass.decision_level()).unwrap();
         assert_eq!(ass.level(decision).unwrap(), ass.decision_level());
-        if self.count == 1 {
+        if count == 1 {
             let a = changes[0];
             assert_eq!(changes.len(), 1);
             assert!(!ass.is_fixed(a_).unwrap());
@@ -349,7 +351,7 @@ impl Propagator for TestAssignment {
             assert!(ass.is_true(a_).unwrap() ^ ass.is_true(b_).unwrap());
             assert_eq!(ass.level(a).unwrap(), ass.decision_level());
         }
-        if self.count == 2 {
+        if count == 2 {
             assert!(!ass.is_fixed(a_).unwrap());
             assert!(!ass.is_fixed(b_).unwrap());
             assert!(ass.is_true(a_).unwrap());
@@ -357,8 +359,8 @@ impl Propagator for TestAssignment {
         }
         true
     }
-    fn undo(&mut self, _ctl: &mut PropagateControl, undo: &[SolverLiteral]) {
-        self.count -= undo.len();
+    fn undo(&self, _ctl: &PropagateControl, undo: &[SolverLiteral]) {
+        self.count.fetch_sub(undo.len(), Ordering::SeqCst);
     }
 }
 
@@ -371,7 +373,7 @@ fn assignment_propagator() {
             a: None,
             b: None,
             c: None,
-            count: 0,
+            count: AtomicUsize::new(0),
         },
     };
     let mut ctl = control_with_context(vec!["0".into()], ctrl_ctx).unwrap();
@@ -402,7 +404,7 @@ impl Propagator for TestMode {
         init.set_check_mode(PropagatorCheckMode::Fixpoint);
         true
     }
-    fn check(&mut self, ctl: &mut PropagateControl) -> bool {
+    fn check(&self, ctl: &mut PropagateControl) -> bool {
         for lit in &self.lits {
             if ctl.assignment().unwrap().truth_value(*lit).unwrap() == TruthValue::Free {
                 let _res = ctl.add_clause(&[*lit], ClauseType::Learnt);
@@ -439,12 +441,12 @@ fn mode_propagator() {
 
 struct TestCheckMode {
     mode: PropagatorCheckMode,
-    result: Rc<RefCell<Option<PropagatorCheckMode>>>,
+    result: Arc<Mutex<Option<PropagatorCheckMode>>>,
 }
 impl Propagator for TestCheckMode {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
         init.set_check_mode(self.mode);
-        *self.result.borrow_mut() = init.get_check_mode().ok();
+        *self.result.lock().unwrap() = init.get_check_mode().ok();
         true
     }
 }
@@ -454,7 +456,7 @@ impl Propagator for TestCheckMode {
 #[test_case(PropagatorCheckMode::Fixpoint; "fixpoint")]
 #[test_case(PropagatorCheckMode::Both; "both")]
 fn check_mode(mode: PropagatorCheckMode) {
-    let result = Rc::new(RefCell::new(None));
+    let result = Arc::new(Mutex::new(None));
     let ctrl_ctx = CtrlCtx {
         non: defaults::Non,
         propagator: TestCheckMode {
@@ -470,19 +472,19 @@ fn check_mode(mode: PropagatorCheckMode) {
         .expect("Failed to ground a logic program.");
     solve(ctl).unwrap();
     assert_eq!(
-        result.borrow().map(|mode| mode as isize),
+        result.lock().unwrap().map(|mode| mode as isize),
         Some(mode as isize)
     );
 }
 
 struct TestUndoMode {
     mode: PropagatorUndoMode,
-    result: Rc<RefCell<Option<PropagatorUndoMode>>>,
+    result: Arc<Mutex<Option<PropagatorUndoMode>>>,
 }
 impl Propagator for TestUndoMode {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
         init.set_undo_mode(self.mode);
-        *self.result.borrow_mut() = init.get_undo_mode().ok();
+        *self.result.lock().unwrap() = init.get_undo_mode().ok();
         true
     }
 }
@@ -490,7 +492,7 @@ impl Propagator for TestUndoMode {
 #[test_case(PropagatorUndoMode::Default; "default")]
 #[test_case(PropagatorUndoMode::Always; "always")]
 fn undo_mode(mode: PropagatorUndoMode) {
-    let result = Rc::new(RefCell::new(None));
+    let result = Arc::new(Mutex::new(None));
     let ctrl_ctx = CtrlCtx {
         non: defaults::Non,
         propagator: TestUndoMode {
@@ -505,18 +507,16 @@ fn undo_mode(mode: PropagatorUndoMode) {
     ctl.ground(&parts)
         .expect("Failed to ground a logic program.");
     solve(ctl).unwrap();
-    assert_eq!(*result.borrow(), Some(mode));
+    assert_eq!(*result.lock().unwrap(), Some(mode));
 }
 
-use std::collections::HashSet;
-use std::sync::{Condvar, Mutex};
 struct TestAddWatch {
     propagated: HashSet<SolverLiteral>,
     a: Option<SolverLiteral>,
     b: Option<SolverLiteral>,
 }
 struct TestPropagator {
-    inner: Rc<RefCell<TestAddWatch>>,
+    inner: Arc<Mutex<TestAddWatch>>,
     // whether thread 1 propagated b
     done: Mutex<bool>,
     cv: Condvar,
@@ -533,7 +533,7 @@ impl Propagator for TestPropagator {
             .unwrap()
             .literal()
             .unwrap();
-        (*self.inner).borrow_mut().a = Some(init.solver_literal(a1).unwrap());
+        self.inner.lock().unwrap().a = Some(init.solver_literal(a1).unwrap());
         let b1 = init
             .symbolic_atoms()
             .unwrap()
@@ -543,7 +543,7 @@ impl Propagator for TestPropagator {
             .unwrap()
             .literal()
             .unwrap();
-        (*self.inner).borrow_mut().b = Some(init.solver_literal(b1).unwrap());
+        self.inner.lock().unwrap().b = Some(init.solver_literal(b1).unwrap());
         let c1 = init
             .symbolic_atoms()
             .unwrap()
@@ -564,8 +564,8 @@ impl Propagator for TestPropagator {
             .literal()
             .unwrap();
         let d = init.solver_literal(d1).unwrap();
-        let a_ = self.inner.borrow().a.unwrap();
-        let b_ = self.inner.borrow().b.unwrap();
+        let a_ = self.inner.lock().unwrap().a.unwrap();
+        let b_ = self.inner.lock().unwrap().b.unwrap();
         init.add_watch_to_thread(a_, 0).unwrap();
         init.add_watch_to_thread(a_.negate(), 0).unwrap();
         init.add_watch_to_thread(b_, 0).unwrap();
@@ -580,7 +580,7 @@ impl Propagator for TestPropagator {
         *self.done.lock().unwrap() = false;
         true
     }
-    fn propagate(&mut self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
+    fn propagate(&self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
         if ctl.thread_id() == 0 {
             // wait for thread 1 to propagate b
             let mut done = self.done.lock().unwrap();
@@ -588,7 +588,7 @@ impl Propagator for TestPropagator {
                 done = self.cv.wait(done).unwrap();
             }
         } else {
-            let mut s = (*self.inner).borrow_mut();
+            let mut s = self.inner.lock().unwrap();
             for lit in changes {
                 *self.done.lock().unwrap() = true;
                 if lit.get_integer() < 0 {
@@ -605,7 +605,7 @@ impl Propagator for TestPropagator {
 
 #[test]
 fn add_watch_propagator() {
-    let p = Rc::new(RefCell::new(TestAddWatch {
+    let p = Arc::new(Mutex::new(TestAddWatch {
         propagated: HashSet::new(),
         a: None,
         b: None,
@@ -646,10 +646,10 @@ fn add_watch_propagator() {
             vec!["c"],
         ]
     );
-    let b = p.borrow().b.unwrap();
+    let b = p.lock().unwrap().b.unwrap();
     let mut test_set = HashSet::new();
     test_set.insert(b);
-    assert_eq!(p.borrow().propagated, test_set);
+    assert_eq!(p.lock().unwrap().propagated, test_set);
 }
 
 struct TestAddClause {
@@ -660,11 +660,11 @@ struct TestAddClause {
     count: usize,
 }
 struct TestPropagator2 {
-    inner: Rc<RefCell<TestAddClause>>,
+    inner: Arc<Mutex<TestAddClause>>,
 }
 impl Propagator for TestPropagator2 {
     fn init(&mut self, init: &mut PropagateInit) -> bool {
-        let mut s = (*self.inner).borrow_mut();
+        let mut s = self.inner.lock().unwrap();
         let a1 = init
             .symbolic_atoms()
             .unwrap()
@@ -689,8 +689,8 @@ impl Propagator for TestPropagator2 {
         init.add_watch(s.b.unwrap()).unwrap();
         true
     }
-    fn propagate(&mut self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
-        let mut s = (*self.inner).borrow_mut();
+    fn propagate(&self, ctl: &mut PropagateControl, changes: &[SolverLiteral]) -> bool {
+        let mut s = self.inner.lock().unwrap();
         s.count += changes.len();
         if s.enable && s.count == 2 {
             let b1 = ctl
@@ -706,8 +706,8 @@ impl Propagator for TestPropagator2 {
         }
         true
     }
-    fn undo(&mut self, _ctl: &mut PropagateControl, undo: &[SolverLiteral]) {
-        let mut s = (*self.inner).borrow_mut();
+    fn undo(&self, _ctl: &PropagateControl, undo: &[SolverLiteral]) {
+        let mut s = self.inner.lock().unwrap();
         s.count -= undo.len();
     }
 }
@@ -717,7 +717,7 @@ impl Propagator for TestPropagator2 {
 #[test_case(ClauseType::Volatile, 3, 4; "volatile")]
 #[test_case(ClauseType::VolatileStatic, 3, 4; "volatile_static")]
 fn add_clause(clause_type: ClauseType, m1: usize, m2: usize) {
-    let data = Rc::new(RefCell::new(TestAddClause {
+    let data = Arc::new(Mutex::new(TestAddClause {
         clause_type,
         enable: true,
         a: None,
@@ -745,7 +745,7 @@ fn add_clause(clause_type: ClauseType, m1: usize, m2: usize) {
     let (models, ctl) = solve(ctl).unwrap();
 
     assert_eq!(models.len(), m1);
-    (*data).borrow_mut().enable = false;
+    data.lock().unwrap().enable = false;
     let (models, _) = solve(ctl).unwrap();
     assert_eq!(models.len(), m2);
 }
