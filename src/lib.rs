@@ -2443,6 +2443,28 @@ impl<C: ControlCtx> GenericControl<C> {
             clingo_control_interrupt(self.ctl.as_ptr());
         }
     }
+    /// Get low-level access to clasp, the solver used by clingo.
+    ///
+    /// Returns `None` if the control object does not use clasp.
+    ///
+    /// **Note:** clingo considers this access experimental and not part of its stable API.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`]
+    #[cfg(feature = "static-linking")]
+    pub fn clasp_facade(&self) -> Result<Option<ClaspFacade<'_>>, ClingoError> {
+        let mut clasp = std::ptr::null_mut();
+        if !unsafe { clingo_control_clasp_facade(self.ctl.as_ptr(), &mut clasp) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_control_clasp_facade() failed",
+            ));
+        }
+        Ok(NonNull::new(clasp).map(|clasp| ClaspFacade {
+            clasp,
+            _control: std::marker::PhantomData,
+        }))
+    }
     /// Get a configuration object to change the solver configuration.
     pub fn configuration_mut(&mut self) -> Result<&mut Configuration, ClingoError> {
         let mut conf = std::ptr::null_mut();
@@ -2887,6 +2909,86 @@ pub fn control_with_context<C: ControlCtx>(
         None => Err(ClingoError::FFIError {
             msg: "Tried creating NonNull from a null pointer.",
         })?,
+    }
+}
+/// Handle for clasp's `ClaspFacade`, see [`GenericControl::clasp_facade()`].
+///
+/// Only available with the `static-linking` feature.
+#[cfg(feature = "static-linking")]
+#[derive(Debug, Clone, Copy)]
+pub struct ClaspFacade<'a> {
+    clasp: NonNull<c_void>,
+    _control: std::marker::PhantomData<&'a ()>,
+}
+#[cfg(feature = "static-linking")]
+impl ClaspFacade<'_> {
+    fn query<T: Default>(
+        &self,
+        function: unsafe extern "C" fn(*const c_void, *mut T) -> bool,
+        msg: &'static str,
+    ) -> Result<T, ClingoError> {
+        let mut value = T::default();
+        if !unsafe { function(self.clasp.as_ptr(), &mut value) } {
+            return Err(ClingoError::new_internal(msg));
+        }
+        Ok(value)
+    }
+    /// Get the current solving step, starting with zero.
+    pub fn step(&self) -> Result<i32, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_step,
+            "Call to clingo_sys_clasp_facade_step() failed",
+        )
+    }
+    /// Check whether the current step is being solved.
+    pub fn solving(&self) -> Result<bool, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_solving,
+            "Call to clingo_sys_clasp_facade_solving() failed",
+        )
+    }
+    /// Check whether solving the current step was interrupted.
+    pub fn interrupted(&self) -> Result<bool, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_interrupted,
+            "Call to clingo_sys_clasp_facade_interrupted() failed",
+        )
+    }
+    /// Get the number of solver variables.
+    pub fn num_vars(&self) -> Result<u32, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_num_vars,
+            "Call to clingo_sys_clasp_facade_num_vars() failed",
+        )
+    }
+    /// Get the number of solver variables eliminated during preprocessing.
+    pub fn num_eliminated_vars(&self) -> Result<u32, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_num_eliminated_vars,
+            "Call to clingo_sys_clasp_facade_num_eliminated_vars() failed",
+        )
+    }
+    /// Get the number of problem constraints.
+    pub fn num_constraints(&self) -> Result<u32, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_num_constraints,
+            "Call to clingo_sys_clasp_facade_num_constraints() failed",
+        )
+    }
+    /// Get the number of solver threads.
+    pub fn concurrency(&self) -> Result<u32, ClingoError> {
+        self.query(
+            clingo_sys_clasp_facade_concurrency,
+            "Call to clingo_sys_clasp_facade_concurrency() failed",
+        )
+    }
+    /// Get the pointer to the `Clasp::ClaspFacade` object.
+    ///
+    /// The pointer can be used by C++ code compiled against the clasp headers of `clingo-sys`.
+    /// Its build script passes their directory to the build scripts of crates depending on
+    /// `clingo-sys` as `DEP_CLINGO_INCLUDE`.
+    pub fn as_ptr(&self) -> *mut c_void {
+        self.clasp.as_ptr()
     }
 }
 /// Handle for the solver configuration.
