@@ -2392,7 +2392,6 @@ impl<C: ControlCtx> GenericControl<C> {
                 "Call to clingo_control_register_propagator() failed",
             ));
         }
-        self.copied = true;
         Ok(())
     }
 
@@ -2656,7 +2655,6 @@ impl<C: ControlCtx> GenericControl<C> {
                 "Call to clingo_control_register_observer() failed",
             ));
         }
-        self.copied = true;
         Ok(())
     }
     /// Get an object to add ground directives to the program.
