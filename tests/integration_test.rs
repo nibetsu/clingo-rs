@@ -921,6 +921,29 @@ fn control_with_context_drop() {
     std::fs::remove_file(&path).unwrap();
     assert!(reified.contains("rule(choice("));
 }
+struct FinishHandler(std::rc::Rc<std::cell::Cell<bool>>);
+impl SolveEventHandler for FinishHandler {
+    fn on_solve_event(&mut self, event: SolveEvent, _goon: &mut bool) -> bool {
+        if let SolveEvent::Finish(_) = event {
+            self.0.set(true);
+        }
+        true
+    }
+}
+#[test]
+fn solve_handle_drop() {
+    // dropping a solve handle closes it, which finishes the search
+    let finished = std::rc::Rc::new(std::cell::Cell::new(false));
+    let ctl = ground_base(vec!["0".into()], "{a;b;c}.");
+    let mut handle = ctl
+        .solve_with_event_handler(SolveMode::YIELD, &[], FinishHandler(finished.clone()))
+        .unwrap();
+    handle.resume().unwrap();
+    assert!(handle.model().unwrap().is_some());
+    assert!(!finished.get());
+    drop(handle);
+    assert!(finished.get());
+}
 #[test]
 fn control_remove_minimize() {
     let mut ctl = ground_base(vec!["0".into()], "{a}. #minimize { 1: a }.");
