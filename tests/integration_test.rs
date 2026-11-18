@@ -883,6 +883,44 @@ fn control_reify_backend() {
     assert!(reified.contains("rule(choice("));
     std::fs::remove_file(&path).unwrap();
 }
+struct NonCtx(defaults::Non);
+impl ControlCtx for NonCtx {
+    type L = defaults::Non;
+    type P = defaults::Non;
+    type O = defaults::Non;
+    type F = defaults::Non;
+    fn logger(&mut self) -> (&mut Self::L, u32) {
+        (&mut self.0, 0)
+    }
+    fn propagator(&mut self) -> (&mut Self::P, bool) {
+        (&mut self.0, false)
+    }
+    fn observer(&mut self) -> (&mut Self::O, bool) {
+        (&mut self.0, false)
+    }
+    fn function_handler(&mut self) -> &mut Self::F {
+        &mut self.0
+    }
+}
+#[test]
+fn control_with_context_drop() {
+    // the reified program is written when the control object is freed
+    let path = temp_file("context.reify");
+    let file = path.to_str().unwrap();
+
+    let mut ctl = control_with_context(vec![], NonCtx(defaults::Non)).unwrap();
+    let reify = BackendType::Reify {
+        sccs: false,
+        steps: false,
+    };
+    ctl.register_backend(reify, file, true).unwrap();
+    ctl.add("base", &[], "{a}.").unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    drop(ctl);
+    let reified = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(reified.contains("rule(choice("));
+}
 #[test]
 fn control_remove_minimize() {
     let mut ctl = ground_base(vec!["0".into()], "{a}. #minimize { 1: a }.");
