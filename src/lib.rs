@@ -2039,7 +2039,7 @@ impl<C: ControlCtx> GenericControl<C> {
         match NonNull::new(handle) {
             Some(handle) => Ok(GenericSolveHandle {
                 handle,
-                ctl: self,
+                ctl: Some(self),
                 _event_handler: Box::new(defaults::Non),
             }),
             None => Err(ClingoError::FFIError {
@@ -2086,7 +2086,7 @@ impl<C: ControlCtx> GenericControl<C> {
         match NonNull::new(handle) {
             Some(handle) => Ok(GenericSolveHandle {
                 handle,
-                ctl: self,
+                ctl: Some(self),
                 _event_handler: event_handler,
             }),
             None => Err(ClingoError::FFIError {
@@ -2736,7 +2736,7 @@ impl<C: ControlCtx> GenericControl<C> {
         match NonNull::new(handle) {
             Some(handle) => Ok(AllModels(GenericSolveHandle {
                 handle,
-                ctl: self,
+                ctl: Some(self),
                 _event_handler: Box::new(defaults::Non),
             })),
             None => Err(ClingoError::FFIError {
@@ -2773,7 +2773,7 @@ impl<C: ControlCtx> GenericControl<C> {
         match NonNull::new(handle) {
             Some(handle) => Ok(OptimalModels(GenericSolveHandle {
                 handle,
-                ctl: self,
+                ctl: Some(self),
                 _event_handler: Box::new(defaults::Non),
             })),
             None => Err(ClingoError::FFIError {
@@ -5761,8 +5761,17 @@ impl PropagateInit {
 #[derive(Debug)]
 pub struct GenericSolveHandle<C: ControlCtx, E: SolveEventHandler> {
     handle: NonNull<clingo_solve_handle_t>,
-    ctl: GenericControl<C>,
+    // None once the handle has been closed
+    ctl: Option<GenericControl<C>>,
     _event_handler: Box<E>,
+}
+impl<C: ControlCtx, E: SolveEventHandler> Drop for GenericSolveHandle<C, E> {
+    fn drop(&mut self) {
+        // close the handle if close() was not called, before the control object is freed
+        if self.ctl.is_some() {
+            unsafe { clingo_solve_handle_close(self.handle.as_ptr()) };
+        }
+    }
 }
 pub type SolveHandle = GenericSolveHandle<DefaultCtx, defaults::Non>;
 impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
@@ -5923,18 +5932,21 @@ impl<C: ControlCtx, E: SolveEventHandler> GenericSolveHandle<C, E> {
     ///
     /// Blocks until the search is stopped (as if an implicit cancel was called before the handle is
     /// released).
+    /// Dropping the handle closes it as well, but ignores errors.
     ///
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
     ///   or [`ErrorCode::Runtime`] if solving fails
-    pub fn close(self) -> Result<GenericControl<C>, ClingoError> {
+    pub fn close(mut self) -> Result<GenericControl<C>, ClingoError> {
+        // taking the control object marks the handle as closed
+        let ctl = self.ctl.take();
         if !unsafe { clingo_solve_handle_close(self.handle.as_ptr()) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_solve_handle_close() failed",
             ));
         }
-        Ok(self.ctl)
+        Ok(ctl.expect("an open solve handle owns its control object"))
     }
 }
 pub struct OptimalModels<C: ControlCtx, E: SolveEventHandler>(GenericSolveHandle<C, E>);
