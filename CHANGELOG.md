@@ -63,6 +63,7 @@ All notable changes to this project will be documented in this file.
 - Add Propagator::DECIDE; Propagator::decide() is only called if it is true
 - Add GenericControl::clasp_facade() and ClaspFacade (requires the static-linking feature)
 - Fix memory leak: control objects created with control_with_context() were never freed
+- Fix memory leak: solve handles dropped without calling close() were never released
 
 ## v0.8.0
 
