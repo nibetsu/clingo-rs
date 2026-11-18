@@ -62,6 +62,7 @@ All notable changes to this project will be documented in this file.
   - Propagator::undo() receives `&PropagateControl`
 - Add Propagator::DECIDE; Propagator::decide() is only called if it is true
 - Add GenericControl::clasp_facade() and ClaspFacade (requires the static-linking feature)
+- Fix memory leak: control objects created with control_with_context() were never freed
 
 ## v0.8.0
 
