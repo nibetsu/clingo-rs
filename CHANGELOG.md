@@ -66,6 +66,8 @@ All notable changes to this project will be documented in this file.
 - Fix memory leak: solve handles dropped without calling close() were never released
 - Fix dangling pointer when converting a GenericControl into NonNull<clingo_control>
   - The caller takes over the ownership of the clingo control
+- Fix dangling pointer when converting a Statement into NonNull<clingo_ast>
+  - The caller takes over the reference of the statement
 
 ## v0.8.0
 
