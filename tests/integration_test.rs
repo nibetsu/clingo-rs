@@ -921,6 +921,30 @@ fn control_with_context_drop() {
     std::fs::remove_file(&path).unwrap();
     assert!(reified.contains("rule(choice("));
 }
+#[test]
+fn control_into_raw() {
+    // the reified program is written when the clingo control is freed
+    let path = temp_file("raw.reify");
+    let file = path.to_str().unwrap();
+
+    let mut ctl = control(vec![]).unwrap();
+    let reify = BackendType::Reify {
+        sccs: false,
+        steps: false,
+    };
+    ctl.register_backend(reify, file, true).unwrap();
+    ctl.add("base", &[], "{a}.").unwrap();
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    // the conversion passes the ownership of the clingo control to the caller
+    let raw: std::ptr::NonNull<clingo_sys::clingo_control> = ctl.into();
+    assert!(!std::fs::read_to_string(&path)
+        .unwrap()
+        .contains("rule(choice("));
+    unsafe { clingo_sys::clingo_control_free(raw.as_ptr()) };
+    let reified = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(reified.contains("rule(choice("));
+}
 struct FinishHandler(std::rc::Rc<std::cell::Cell<bool>>);
 impl SolveEventHandler for FinishHandler {
     fn on_solve_event(&mut self, event: SolveEvent, _goon: &mut bool) -> bool {
