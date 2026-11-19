@@ -8063,8 +8063,15 @@ impl From<&mut Model> for *mut clingo_model {
         &mut model.0
     }
 }
+/// Convert the control object into a raw clingo control.
+///
+/// If the control object owns the clingo control, the caller takes over the ownership and has to
+/// free it with `clingo_control_free()`.
+/// The context of the control object is leaked, because clingo keeps pointers to it.
 impl<C: ControlCtx> From<GenericControl<C>> for NonNull<clingo_control> {
     fn from(control: GenericControl<C>) -> Self {
+        // neither free the clingo control nor the context it points to
+        let control = std::mem::ManuallyDrop::new(control);
         control.ctl
     }
 }
