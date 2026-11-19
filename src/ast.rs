@@ -3433,8 +3433,14 @@ impl<'a> From<&mut ProgramBuilder<'a>> for *mut clingo_program_builder_t {
         pb.theref
     }
 }
+/// Convert the statement into a raw clingo AST.
+///
+/// The caller takes over the reference of the statement and has to release it with
+/// `clingo_ast_release()`.
 impl<'a> From<Statement<'a>> for NonNull<clingo_ast> {
     fn from(stmt: Statement) -> Self {
+        // do not release the reference
+        let stmt = std::mem::ManuallyDrop::new(stmt);
         stmt.ast.ptr
     }
 }
