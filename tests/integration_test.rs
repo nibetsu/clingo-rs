@@ -1172,6 +1172,29 @@ fn ast_location() {
 /// Call `f` for each statement of `program` except the initial `#program base.`
 ///
 /// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
+// returns the string representation of a raw clingo AST
+fn raw_ast_to_string(ast: std::ptr::NonNull<clingo_sys::clingo_ast>) -> String {
+    let mut size = 0;
+    assert!(unsafe { clingo_sys::clingo_ast_to_string_size(ast.as_ptr(), &mut size) });
+    let mut buffer = vec![0u8; size];
+    assert!(unsafe {
+        clingo_sys::clingo_ast_to_string(ast.as_ptr(), buffer.as_mut_ptr() as *mut _, size)
+    });
+    std::ffi::CStr::from_bytes_with_nul(&buffer)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+#[test]
+fn ast_statement_into_raw() {
+    for_each_statement("a :- b.", |stm| {
+        // the conversion passes the reference of the statement to the caller
+        let raw: std::ptr::NonNull<clingo_sys::clingo_ast> = stm.clone().into();
+        assert_eq!(raw_ast_to_string(raw), "a :- b.");
+        unsafe { clingo_sys::clingo_ast_release(raw.as_ptr()) };
+    });
+}
 fn for_each_statement(program: &str, f: impl FnMut(&Statement)) {
     struct Handler<F> {
         f: F,
