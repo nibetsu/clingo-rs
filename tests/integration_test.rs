@@ -1172,6 +1172,14 @@ fn ast_location() {
 /// Call `f` for each statement of `program` except the initial `#program base.`
 ///
 /// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
+#[test]
+fn ast_script() {
+    let loc = Location::default();
+    let node = Node::from(script(&loc, "python", "print(1)").unwrap());
+    assert_eq!(node.node_type().unwrap(), NodeType::Script);
+    assert_eq!(node.get_string(Attribute::Name).unwrap(), "python");
+    assert_eq!(node.get_string(Attribute::Code).unwrap(), "print(1)");
+}
 struct StatementAdder<'a, 'b> {
     builder: &'b mut ProgramBuilder<'a>,
 }
