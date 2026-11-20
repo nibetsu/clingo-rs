@@ -115,6 +115,12 @@ impl Location {
 pub struct ProgramBuilder<'a> {
     pub(crate) theref: &'a mut clingo_program_builder_t,
 }
+impl Drop for ProgramBuilder<'_> {
+    fn drop(&mut self) {
+        // like clingo's C++ API, end building the program if end() was not called
+        unsafe { clingo_program_builder_end(self.theref) };
+    }
+}
 impl<'a> ProgramBuilder<'a> {
     /// Get an object to add non-ground directives to the program.
     pub fn from<C: ControlCtx>(
@@ -143,8 +149,8 @@ impl<'a> ProgramBuilder<'a> {
     }
     /// Adds a statement to the program.
     ///
-    /// **Attention:** The [`end()`](struct.ProgramBuilder.html#method.end) must be called after
-    /// all statements have been added.
+    /// **Attention:** Statements are only added once [`end()`](struct.ProgramBuilder.html#method.end)
+    /// is called or the program builder is dropped.
     ///
     /// # Arguments
     ///
@@ -165,8 +171,13 @@ impl<'a> ProgramBuilder<'a> {
 
     /// End building a program.
     /// The method consumes the program builder.
+    ///
+    /// Dropping the program builder ends building the program as well, but ignores errors.
     pub fn end(self) -> Result<(), ClingoError> {
-        if !unsafe { clingo_program_builder_end(self.theref) } {
+        let builder: *mut clingo_program_builder_t = self.theref;
+        // drop() must not end building the program a second time
+        std::mem::forget(self);
+        if !unsafe { clingo_program_builder_end(builder) } {
             return Err(ClingoError::new_internal(
                 "Call to clingo_program_builder_end() failed",
             ));
@@ -3423,9 +3434,15 @@ pub fn comment<'a>(
     }
 }
 
+/// Convert the program builder into a raw clingo program builder.
+///
+/// The caller has to end building the program with `clingo_program_builder_end()`.
 impl<'a> From<ProgramBuilder<'a>> for &'a mut clingo_program_builder_t {
     fn from(pb: ProgramBuilder<'a>) -> Self {
-        pb.theref
+        // do not end building the program
+        let pb = std::mem::ManuallyDrop::new(pb);
+        // SAFETY: pb is never used or dropped again, so the reference is moved out of it
+        unsafe { std::ptr::read(&pb.theref) }
     }
 }
 impl<'a> From<&mut ProgramBuilder<'a>> for *mut clingo_program_builder_t {
