@@ -68,6 +68,9 @@ All notable changes to this project will be documented in this file.
   - The caller takes over the ownership of the clingo control
 - Fix dangling pointer when converting a Statement into NonNull<clingo_ast>
   - The caller takes over the reference of the statement
+- Fix program builders dropped without calling end() discarding their statements
+  - ProgramBuilder ends building the program when dropped
+  - Because ProgramBuilder implements Drop, borrows like `&'a mut ProgramBuilder<'a>` no longer compile; use separate lifetimes such as `&'b mut ProgramBuilder<'a>`
 
 ## v0.8.0
 
