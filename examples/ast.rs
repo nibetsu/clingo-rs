@@ -4,12 +4,12 @@ use clingo::{
 };
 use std::env;
 
-pub struct OnStatementData<'a, 'b> {
-    atom: &'b ast::SymbolicAtom<'b>,
-    builder: &'a mut ast::ProgramBuilder<'a>,
+pub struct OnStatementData<'a, 'b, 'c> {
+    atom: &'c ast::SymbolicAtom<'c>,
+    builder: &'b mut ast::ProgramBuilder<'a>,
 }
 
-impl<'a, 'b> ast::StatementHandler for OnStatementData<'a, 'b> {
+impl ast::StatementHandler for OnStatementData<'_, '_, '_> {
     // adds atom enable to all rule bodies
     fn on_statement(&mut self, stm: &ast::Statement) -> bool {
         let stm_clone = stm.clone();
@@ -117,7 +117,6 @@ fn main() {
         .expect("Failed to parse logic program.");
 
     // finish building a program
-    let builder = ast::ProgramBuilder::from(&mut ctl).unwrap();
     builder.end().expect("Failed to finish building a program.");
 
     // ground the base part
