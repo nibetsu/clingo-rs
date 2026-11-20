@@ -3039,7 +3039,8 @@ where
 /// Construct an AST node of type `NodeType.Script`.
 pub fn script<'a>(location: &Location, name: &str, code: &str) -> Result<Script<'a>, ClingoError> {
     let mut ast = std::ptr::null_mut();
-    let code = internalize_string(code);
+    let name = internalize_string(name)?;
+    let code = internalize_string(code)?;
 
     if !unsafe {
         clingo_ast_build(
