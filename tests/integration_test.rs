@@ -1172,6 +1172,28 @@ fn ast_location() {
 /// Call `f` for each statement of `program` except the initial `#program base.`
 ///
 /// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
+struct StatementAdder<'a, 'b> {
+    builder: &'b mut ProgramBuilder<'a>,
+}
+impl StatementHandler for StatementAdder<'_, '_> {
+    fn on_statement(&mut self, stm: &Statement) -> bool {
+        self.builder.add(stm).is_ok()
+    }
+}
+#[test]
+fn ast_program_builder_drop() {
+    // dropping the program builder ends building the program
+    let mut ctl = control(vec!["0".into()]).unwrap();
+    {
+        let mut builder = ProgramBuilder::from(&mut ctl).unwrap();
+        let mut adder = StatementAdder {
+            builder: &mut builder,
+        };
+        parse_string_with_statement_handler("#const n=2. p(n). q.", &mut adder).unwrap();
+    }
+    ctl.ground(&[Part::new("base", vec![]).unwrap()]).unwrap();
+    assert_eq!(models(ctl), [vec!["p(2)", "q"]]);
+}
 // returns the string representation of a raw clingo AST
 fn raw_ast_to_string(ast: std::ptr::NonNull<clingo_sys::clingo_ast>) -> String {
     let mut size = 0;
