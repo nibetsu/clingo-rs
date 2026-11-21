@@ -1756,7 +1756,7 @@ where
             &mut ast,
             location,
             operator_type as i32,
-            argument.ast,
+            argument.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -1796,8 +1796,8 @@ where
             &mut ast,
             location,
             operator_type as i32,
-            left.ast,
-            right.ast,
+            left.ast.ptr.as_ptr(),
+            right.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -1835,8 +1835,8 @@ where
             clingo_ast_type_e_clingo_ast_type_interval as i32,
             &mut ast,
             location,
-            left.ast,
-            right.ast,
+            left.ast.ptr.as_ptr(),
+            right.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -1923,7 +1923,7 @@ where
         clingo_ast_build(
             clingo_ast_type_e_clingo_ast_type_symbolic_atom as i32,
             &mut ast,
-            symbol.ast,
+            symbol.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -1955,7 +1955,7 @@ where
             clingo_ast_type_e_clingo_ast_type_guard as i32,
             &mut ast,
             operator as isize,
-            term.ast,
+            term.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -1986,7 +1986,7 @@ where
         clingo_ast_build(
             clingo_ast_type_e_clingo_ast_type_comparison as i32,
             &mut ast,
-            term.ast,
+            term.ast.ptr.as_ptr(),
             guards.as_ptr() as *const clingo_ast_t,
             guards.len(),
         )
@@ -2025,7 +2025,7 @@ where
             clingo_ast_type_e_clingo_ast_type_conditional_literal as i32,
             &mut ast,
             location,
-            literal.ast,
+            literal.ast.ptr.as_ptr(),
             condition.as_ptr() as *const clingo_ast_t,
             condition.len(),
         )
@@ -2184,7 +2184,7 @@ pub fn head_aggregate_element<'a>(
             &mut ast,
             terms.as_ptr() as *const clingo_ast_t,
             terms.len(),
-            condition.ast,
+            condition.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -2367,7 +2367,7 @@ pub fn theory_unparsed_term_element<'a>(
             &mut ast,
             operators.as_ptr(),
             operators.len(),
-            term.ast,
+            term.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -2433,7 +2433,7 @@ where
             clingo_ast_type_e_clingo_ast_type_theory_guard as i32,
             &mut ast,
             operator_name,
-            term.ast,
+            term.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -2508,7 +2508,7 @@ where
             clingo_ast_type_e_clingo_ast_type_theory_atom as i32,
             &mut ast,
             location,
-            term.ast,
+            term.ast.ptr.as_ptr(),
             elements.as_ptr() as *const clingo_ast_t,
             elements.len(),
             guard,
@@ -2847,7 +2847,7 @@ where
             clingo_ast_type_e_clingo_ast_type_rule as i32,
             &mut ast,
             location,
-            head.ast,
+            head.ast.ptr.as_ptr(),
             body.as_ptr(),
             body.len(),
         )
@@ -2890,7 +2890,7 @@ where
             &mut ast,
             location,
             name,
-            value.ast,
+            value.ast.ptr.as_ptr(),
             is_default as i32,
         )
     } {
@@ -2967,7 +2967,7 @@ where
             clingo_ast_type_e_clingo_ast_type_show_term as i32,
             &mut ast,
             location,
-            term.ast,
+            term.ast.ptr.as_ptr(),
             body.as_ptr() as *const clingo_ast_t,
             body.len(),
             csp as i32,
@@ -3011,8 +3011,8 @@ where
             clingo_ast_type_e_clingo_ast_type_minimize as i32,
             &mut ast,
             location,
-            weight.ast,
-            priority.ast,
+            weight.ast.ptr.as_ptr(),
+            priority.ast.ptr.as_ptr(),
             terms.as_ptr() as *const clingo_ast_t,
             terms.len(),
             body.as_ptr() as *const clingo_ast_t,
@@ -3135,10 +3135,10 @@ pub fn external<'a>(
             clingo_ast_type_e_clingo_ast_type_external as i32,
             &mut ast,
             location,
-            atom.ast,
+            atom.ast.ptr.as_ptr(),
             body.as_ptr() as *const clingo_ast_t,
             body.len(),
-            external_type.ast,
+            external_type.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -3178,8 +3178,8 @@ where
             clingo_ast_type_e_clingo_ast_type_edge as i32,
             &mut ast,
             location,
-            node_u.ast,
-            node_v.ast,
+            node_u.ast.ptr.as_ptr(),
+            node_v.ast.ptr.as_ptr(),
             body.as_ptr() as *const clingo_ast_t,
             body.len(),
         )
@@ -3225,12 +3225,12 @@ where
             clingo_ast_type_e_clingo_ast_type_heuristic as i32,
             &mut ast,
             location,
-            atom.ast,
+            atom.ast.ptr.as_ptr(),
             body.as_ptr() as *const clingo_ast_t,
             body.len(),
-            bias.ast,
-            priority.ast,
-            modifier.ast,
+            bias.ast.ptr.as_ptr(),
+            priority.ast.ptr.as_ptr(),
+            modifier.ast.ptr.as_ptr(),
         )
     } {
         return Err(ClingoError::new_internal(
@@ -3263,7 +3263,7 @@ pub fn project_atom<'a>(
             clingo_ast_type_e_clingo_ast_type_project_atom as i32,
             &mut ast,
             location,
-            atom.ast,
+            atom.ast.ptr.as_ptr(),
             body.as_ptr() as *const clingo_ast_t,
             body.len(),
         )
