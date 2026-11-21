@@ -24,6 +24,7 @@ use vec1::Vec1;
 /// By convention, such locations use a name put in angular brackets as filename.
 /// The string members of a location object are internalized and valid for the duration of the process.
 #[derive(Debug, Copy, Clone)]
+#[repr(transparent)]
 pub struct Location(pub(crate) clingo_location);
 impl Default for Location {
     /// Create a default location.
@@ -475,6 +476,7 @@ impl CommentType {
 // Here start the ASTTypes
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Term<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -548,6 +550,7 @@ pub enum TermIsA<'a> {
     Pool(Pool<'a>),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Literal<'a> {
     ast: Ast<'a>,
 }
@@ -629,6 +632,7 @@ impl<'a> From<AtomicLiteral<'a>> for Literal<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Head<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -691,6 +695,7 @@ pub enum HeadIsA<'a> {
     TheoryAtom(TheoryAtom<'a>),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BodyLiteral<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -744,6 +749,7 @@ impl<'a> BodyLiteral<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BodyAtom<'a> {
     ast: Ast<'a>,
 }
@@ -769,6 +775,7 @@ impl<'a> From<TheoryAtom<'a>> for BodyAtom<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryTerm<'a> {
     ast: Ast<'a>,
 }
@@ -799,6 +806,7 @@ impl<'a> From<TheoryUnparsedTerm<'a>> for TheoryTerm<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Statement<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -954,6 +962,7 @@ impl<'a> From<Comment<'a>> for Statement<'a> {
 ///
 /// Nodes are compared and hashed structurally, ignoring their locations.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Node<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -1273,10 +1282,12 @@ impl<'a> TryFrom<Node<'a>> for Statement<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Id<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Variable<'a> {
     ast: Ast<'a>,
 }
@@ -1286,6 +1297,7 @@ impl<'a> Variable<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct SymbolicTerm<'a> {
     ast: Ast<'a>,
 }
@@ -1297,6 +1309,7 @@ impl<'a> SymbolicTerm<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Function<'a> {
     pub(crate) ast: Ast<'a>,
 }
@@ -1311,11 +1324,13 @@ impl<'a> Function<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct UnaryOperation<'a> {
     ast: Ast<'a>,
 }
 impl<'a> UnaryOperation<'a> {}
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BinaryOperation<'a> {
     ast: Ast<'a>,
 }
@@ -1331,6 +1346,7 @@ impl<'a> BinaryOperation<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Interval<'a> {
     ast: Ast<'a>,
 }
@@ -1343,6 +1359,7 @@ impl<'a> Interval<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Pool<'a> {
     ast: Ast<'a>,
 }
@@ -1353,6 +1370,7 @@ struct BooleanConstant<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct SymbolicAtom<'a> {
     ast: Ast<'a>,
 }
@@ -1362,6 +1380,7 @@ impl<'a> SymbolicAtom<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Guard<'a> {
     ast: Ast<'a>,
 }
@@ -1371,6 +1390,7 @@ impl<'a> Guard<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Comparison<'a> {
     ast: Ast<'a>,
 }
@@ -1380,10 +1400,12 @@ impl<'a> Comparison<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct ConditionalLiteral<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Aggregate<'a> {
     ast: Ast<'a>,
 }
@@ -1393,60 +1415,74 @@ impl<'a> Aggregate<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BodyAggregateElement<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BodyAggregate<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct HeadAggregateElement<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct HeadAggregate<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Disjunction<'a> {
     ast: Ast<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct DisjointElement<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Disjoint<'a> {
     ast: Ast<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheorySequence<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryFunction<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryUnparsedTermElement<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryUnparsedTerm<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryGuard<'a> {
     pub(crate) ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryAtomElement<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryAtom<'a> {
     ast: Ast<'a>,
 }
@@ -1480,10 +1516,12 @@ impl<'a> TheoryAtom<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct AtomicLiteral<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct BasicLiteral<'a> {
     ast: Ast<'a>,
 }
@@ -1493,22 +1531,27 @@ impl<'a> BasicLiteral<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryOperatorDefinition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryTermDefinition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryGuardDefinition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryAtomDefinition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Rule<'a> {
     ast: Ast<'a>,
 }
@@ -1524,58 +1567,72 @@ impl<'a> Rule<'a> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Definition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct ShowSignature<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct ShowTerm<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Minimize<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Script<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Program<'a> {
     pub(crate) ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct External<'a> {
     pub(crate) ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Edge<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Heuristic<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct ProjectAtom<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct ProjectSignature<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Defined<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct TheoryDefinition<'a> {
     ast: Ast<'a>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Comment<'a> {
     ast: Ast<'a>,
 }

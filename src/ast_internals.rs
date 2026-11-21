@@ -343,7 +343,11 @@ pub enum Attribute {
 }
 
 /// This struct provides a view to nodes in the AST.
+///
+/// It has the layout of a node pointer, so that slices of AST wrappers can be passed to clingo as
+/// arrays of nodes.
 #[derive(Debug)]
+#[repr(transparent)]
 pub(crate) struct Ast<'a> {
     pub(crate) ptr: NonNull<clingo_ast_t>,
     pub(crate) _lifetime: PhantomData<&'a ()>,
