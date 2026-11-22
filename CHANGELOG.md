@@ -73,6 +73,8 @@ All notable changes to this project will be documented in this file.
   - Because ProgramBuilder implements Drop, borrows like `&'a mut ProgramBuilder<'a>` no longer compile; use separate lifetimes such as `&'b mut ProgramBuilder<'a>`
 - Fix ast::script(), which crashed
 - Fix memory leak: AST nodes passed to AST constructors were never released
+- Fix panic when a dropped Backend fails to end, which aborts the process during unwinding
+  - Add Backend::end() to handle the error; dropping a Backend ignores it
 
 ## v0.8.0
 
