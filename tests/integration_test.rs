@@ -1181,9 +1181,6 @@ fn ast_location() {
     assert_eq!(location.end_file().unwrap(), "");
 }
 
-/// Call `f` for each statement of `program` except the initial `#program base.`
-///
-/// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
 #[test]
 fn ast_script() {
     let loc = Location::default();
@@ -1237,6 +1234,9 @@ fn ast_statement_into_raw() {
         unsafe { clingo_sys::clingo_ast_release(raw.as_ptr()) };
     });
 }
+/// Call `f` for each statement of `program` except the initial `#program base.`
+///
+/// Panics in `f` are forwarded after parsing because they must not unwind through clingo.
 fn for_each_statement(program: &str, f: impl FnMut(&Statement)) {
     struct Handler<F> {
         f: F,
