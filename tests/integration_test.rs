@@ -855,7 +855,10 @@ fn control_aspif_backend() {
     let mut handle = ctl.solve(SolveMode::empty(), &[]).unwrap();
     handle.get().unwrap();
     drop(handle.close().unwrap());
-    let aspif = std::fs::read_to_string(&path).unwrap();
+    // clingo writes the file in text mode, which uses \r\n on Windows
+    let aspif = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert!(aspif.starts_with("asp "));
     assert!(aspif.ends_with("\n0\n"));
 
