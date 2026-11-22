@@ -1053,6 +1053,18 @@ fn backend_theory_atoms() {
     );
 }
 #[test]
+fn backend_end() {
+    // end() adds the directives, and drop() must not end the backend a second time
+    let mut ctl = control(vec!["0".into()]).unwrap();
+    let mut backend = ctl.backend().unwrap();
+    let a = backend
+        .add_atom(Some(Symbol::create_id("a", true).unwrap()))
+        .unwrap();
+    backend.rule(false, &[a], &[]).unwrap();
+    backend.end().unwrap();
+    assert_eq!(models(ctl), [vec!["a"]]);
+}
+#[test]
 fn symbolic_atoms_find() {
     let ctl = ground_base(vec![], "a. {b}. c :- d.");
     let atoms = ctl.symbolic_atoms().unwrap();
