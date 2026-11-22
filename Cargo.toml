@@ -26,13 +26,13 @@ derive = ["clingo-derive"]
 
 [dependencies]
 vec1 = "1.8.0"
-clingo-sys = { version = "0.8.0", path = "../clingo-sys" }
+clingo-sys = { version = "0.8.0", git = "https://github.com/nibetsu/clingo-sys", branch = "clingo-5.8.3" }
 clingo-derive = { version = "=0.2.0", optional = true }
 thiserror = "1.0"
 bitflags = "2"
 
 [dev-dependencies]
-clingo-sys = { version = "0.8.0", path = "../clingo-sys" }
+clingo-sys = { version = "0.8.0", git = "https://github.com/nibetsu/clingo-sys", branch = "clingo-5.8.3" }
 rand = "=0.8.5"
 trybuild = "1.0"
 clingo-derive = { version = "=0.2.0" }
