@@ -2659,6 +2659,8 @@ impl<C: ControlCtx> GenericControl<C> {
     }
     /// Get an object to add ground directives to the program.
     ///
+    /// The directives are added once [`Backend::end()`] is called or the backend is dropped.
+    ///
     /// # Errors
     ///
     /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
@@ -3275,13 +3277,32 @@ pub struct Backend<'a> {
 impl<'a> Drop for Backend<'a> {
     /// Finalize the backend after using it.
     fn drop(&mut self) {
-        // println!("drop Backend");
-        if !unsafe { clingo_backend_end(self.theref) } {
-            panic!("Call to clingo_backend_end() failed");
-        }
+        // like clingo's C++ API, end the backend if end() was not called;
+        // panicking here would abort the process if the backend is dropped during unwinding
+        unsafe { clingo_backend_end(self.theref) };
     }
 }
 impl<'a> Backend<'a> {
+    /// Finalize the backend after using it.
+    /// The method consumes the backend.
+    ///
+    /// Dropping the backend ends it as well, but ignores errors.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClingoError::InternalError`] with [`ErrorCode::BadAlloc`]
+    pub fn end(self) -> Result<(), ClingoError> {
+        let backend: *mut clingo_backend_t = self.theref;
+        // drop() must not end the backend a second time
+        std::mem::forget(self);
+        if !unsafe { clingo_backend_end(backend) } {
+            return Err(ClingoError::new_internal(
+                "Call to clingo_backend_end() failed",
+            ));
+        }
+        Ok(())
+    }
+
     /// Add a rule to the program.
     ///
     /// # Arguments
