@@ -6,8 +6,8 @@ jobs:
   linux:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/checkout@v7
+      - uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true
           miniconda-version: "latest"
@@ -26,8 +26,8 @@ jobs:
   macos:
     runs-on: "macos-latest"
     steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/checkout@v7
+      - uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true
           miniconda-version: "latest"
@@ -46,8 +46,8 @@ jobs:
   windows:
     runs-on: "windows-latest"
     steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/checkout@v7
+      - uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true
           miniconda-version: "latest"
@@ -66,7 +66,7 @@ jobs:
   linux-static:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: cargo build --features=static-linking,derive --verbose
       - name: Run tests
@@ -74,7 +74,7 @@ jobs:
   macos-static:
     runs-on: "macos-latest"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: cargo build --features=static-linking,derive --verbose
       - name: Run tests
@@ -82,7 +82,7 @@ jobs:
   windows-static:
     runs-on: "windows-latest"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: cargo build --features static-linking,derive -vv
       - name: Run tests
